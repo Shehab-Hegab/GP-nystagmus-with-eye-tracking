@@ -1,4 +1,5 @@
-# GP-Nystagmus-Eye-Tracking-Training
+# GP-Nystagmus-Eye-Tracking
+
 Eye Tracking and Training Game to train and improve eye gaze, especially in people with Gaze-Fixation issues or Oculomotor Disorders.
 
 Access all associated resources/uploads below:
