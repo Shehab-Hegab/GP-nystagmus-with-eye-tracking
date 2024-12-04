@@ -17,3 +17,7 @@ By tracking the movement of the train, the camera captures precise eye movement 
 
 ![WhatsApp Image 2024-11-10 at 16 20 57_cc97e763](https://github.com/user-attachments/assets/8647803a-8f4b-4d0d-be54-c3bbc4d5953d)
 ![WhatsApp Image 2024-11-10 at 16 18 39_d6945c7a](https://github.com/user-attachments/assets/7a4fff67-5854-419d-8dda-51a149f4ba05)
+
+
+##
+You can upload a video for analysis, and we will provide detailed data, or alternatively, you can play the game in real-time. During gameplay, you'll be asked to track the train, and the camera will activate, capturing your eye movements and recording the data in a file for further analysis.
