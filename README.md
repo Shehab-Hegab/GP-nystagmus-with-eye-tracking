@@ -20,7 +20,7 @@ By tracking the movement of the train, the camera captures precise eye movement 
 
 
 ##
-# You can upload a video for analysis, and we will provide detailed data, or alternatively, you can play the game in real-time. During gameplay, you'll be asked to track the train, and the camera will activate, capturing your eye movements and recording the data in a file for further analysis.
+ You can upload a video for analysis, and we will provide detailed data, or alternatively, you can play the game in real-time. During gameplay, you'll be asked to track the train, and the camera will activate, capturing your eye movements and recording the data in a file for further analysis.
 
 ##
 ![image](https://github.com/user-attachments/assets/0efa7c91-05aa-41e1-abfb-bac942001921)
@@ -41,7 +41,7 @@ By tracking the movement of the train, the camera captures precise eye movement 
 ![image](https://github.com/user-attachments/assets/61c0f74b-25c9-44e2-873d-b0f7a6afbbd5)
 
 ##
-# All patient data, including their test histories and timestamps down to hours and seconds, will be consolidated into a single Excel file, and a Convolutional Neural Network (CNN) will be applied to analyze the data.
+ All patient data, including their test histories and timestamps down to hours and seconds, will be consolidated into a single Excel file, and a Convolutional Neural Network (CNN) will be applied to analyze the data.
 
 ##
 
