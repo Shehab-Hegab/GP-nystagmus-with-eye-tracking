@@ -31,3 +31,9 @@ You can upload a video for analysis, and we will provide detailed data, or alter
 
 ![image](https://github.com/user-attachments/assets/8a77392b-bd8f-4082-93c3-9f816c7ab1f3)
 
+
+# eye only 
+
+![image](https://github.com/user-attachments/assets/918ef336-7b7b-41e4-ac6c-f8c70c944590)
+
+
