@@ -2,10 +2,15 @@
 Eye Tracking and Training Game to train and improve eye gaze, especially in people with Gaze-Fixation issues or Oculomotor Disorders.
 
 Access all associated resources/uploads below:
-- [Full train](https://drive.google.com/file/d/1_lrU5ZZ7M_gU2Fe3pQ_poHGJD09g1Ga6/view?usp=drive_link)
-- [Single train](https://drive.google.com/file/d/18j5EG0ItMiiDfyEGelplE8B8M-3FuAE-/view?usp=drive_link)
+
 - [Gantt Chart & Timeline](https://docs.google.com/spreadsheets/d/1eK1cRmBCjk7WUDr72NmJM5GHjNgXD3gAjFbqDRIShxM/edit?usp=sharing)
 - Surveys - one for [Patients](https://docs.google.com/forms/d/e/1FAIpQLSfhU_CxO59pTOpdHfrxsELWIn-23gpyVego-ujayt2F48EqSg/viewform) & one for [Doctors](https://docs.google.com/forms/d/e/1FAIpQLSciKyrwdtClstPlHFf0jYcR8N-ioTminI9EbtT88zsERKBKZg/viewform)
+
+##
+
+# You will find two game models available through this link.
+- [Full train](https://drive.google.com/file/d/1_lrU5ZZ7M_gU2Fe3pQ_poHGJD09g1Ga6/view?usp=drive_link)
+- [Single train](https://drive.google.com/file/d/18j5EG0ItMiiDfyEGelplE8B8M-3FuAE-/view?usp=drive_link)
 
 ##
 By tracking the movement of the train, the camera captures precise eye movement data, enabling the detection of potential vision issues or disorders such as nystagmus. Additionally, the train's velocity can be adjusted to facilitate tailored rehabilitation programs for specific eye conditions.
