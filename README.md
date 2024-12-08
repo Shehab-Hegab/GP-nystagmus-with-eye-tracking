@@ -3,7 +3,7 @@ Eye Tracking and Training Game to train and improve eye gaze, especially in peop
 
 Access all associated resources/uploads below:
 - [Full train](https://drive.google.com/file/d/1_lrU5ZZ7M_gU2Fe3pQ_poHGJD09g1Ga6/view?usp=drive_link)
-- [Single train)]([https://drive.google.com/file/d/18j5EG0ItMiiDfyEGelplE8B8M-3FuAE-/view?usp=drive_link))
+- [Single train)](https://drive.google.com/file/d/18j5EG0ItMiiDfyEGelplE8B8M-3FuAE-/view?usp=drive_link)
 - [Gantt Chart & Timeline](https://docs.google.com/spreadsheets/d/1eK1cRmBCjk7WUDr72NmJM5GHjNgXD3gAjFbqDRIShxM/edit?usp=sharing)
 - Surveys - one for [Patients](https://docs.google.com/forms/d/e/1FAIpQLSfhU_CxO59pTOpdHfrxsELWIn-23gpyVego-ujayt2F48EqSg/viewform) & one for [Doctors](https://docs.google.com/forms/d/e/1FAIpQLSciKyrwdtClstPlHFf0jYcR8N-ioTminI9EbtT88zsERKBKZg/viewform)
 
