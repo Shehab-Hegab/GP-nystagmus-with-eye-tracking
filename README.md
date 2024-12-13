@@ -23,6 +23,15 @@ By tracking the movement of the train, the camera captures precise eye movement 
 ![WhatsApp Image 2024-11-30 at 15 45 43_6e4a1e93](https://github.com/user-attachments/assets/1870d759-da74-462f-bde5-db7a476c92c5)
 
 ##
+![image](https://github.com/user-attachments/assets/c94ff86b-4a83-4859-b4a5-6a5c3bac466a)
+
+![image](https://github.com/user-attachments/assets/53485e02-1004-4433-9dbd-0ac236ef7a08)
+
+
+
+
+
+
 
 ![WhatsApp Image 2024-11-10 at 16 20 57_cc97e763](https://github.com/user-attachments/assets/8647803a-8f4b-4d0d-be54-c3bbc4d5953d)
 ![WhatsApp Image 2024-11-10 at 16 18 39_d6945c7a](https://github.com/user-attachments/assets/7a4fff67-5854-419d-8dda-51a149f4ba05)
