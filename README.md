@@ -10,7 +10,7 @@ Access all associated resources/uploads below:
 
 # You will find two game models available through this link.
 - [Full train](https://drive.google.com/file/d/1_lrU5ZZ7M_gU2Fe3pQ_poHGJD09g1Ga6/view?usp=drive_link)
-- [Single train](https://drive.google.com/file/d/18j5EG0ItMiiDfyEGelplE8B8M-3FuAE-/view?usp=drive_link)
+- [Single train](https://drive.google.com/file/d/1uQnZRPEIM_3OgR7_sidVaX8bNVZxBI8W/view?usp=drive_link)
 
 ##
 By tracking the movement of the train, the camera captures precise eye movement data, enabling the detection of potential vision issues or disorders such as nystagmus. Additionally, the train's velocity can be adjusted to facilitate tailored rehabilitation programs for specific eye conditions.
