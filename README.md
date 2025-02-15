@@ -19,6 +19,10 @@ By tracking the movement of the train, the camera captures precise eye movement 
 
 ![Shehab (5)](https://github.com/user-attachments/assets/7de2ecc5-b16d-4cc5-b4e7-b312d7f127f5)
 
+##
+# process diagram
+![image](https://github.com/user-attachments/assets/1502fac5-6160-49bb-bd6f-02e62fb42eb3)
+
 
 ##
 # Full Train
