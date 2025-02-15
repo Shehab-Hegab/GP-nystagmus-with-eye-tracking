@@ -15,7 +15,12 @@ Access all associated resources/uploads below:
 ##
 By tracking the movement of the train, the camera captures precise eye movement data, enabling the detection of potential vision issues or disorders such as nystagmus. Additionally, the train's velocity can be adjusted to facilitate tailored rehabilitation programs for specific eye conditions.
 ##
+system arch 
 
+![Shehab (5)](https://github.com/user-attachments/assets/7de2ecc5-b16d-4cc5-b4e7-b312d7f127f5)
+
+
+##
 # Full Train
 
 ![WhatsApp Image 2024-11-30 at 15 57 42_41eb9ca0](https://github.com/user-attachments/assets/e88a1ea3-178a-4f93-9001-25e3d3edc743)
