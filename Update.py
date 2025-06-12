@@ -1,642 +1,764 @@
+# -*- coding: utf-8 -*-
+"""
+Final Nystagmus and Eye Tremor Analysis System
+Version: 4.0 (Professional, Single-File, OOP, Type-Hinted)
+
+This script is a robust, single-file application for real-time eye tracking and
+tremor analysis. It incorporates professional software engineering practices:
+ - Object-Oriented structure (Application, EyeTracker classes)
+ - Type Hinting for clarity and static analysis
+ - Dataclasses for robust data structures
+ - try...finally for guaranteed resource cleanup and data saving
+ - Encapsulated Logic, Centralized Configuration, Refactored Kinematics (DRY).
+ - Non-Blocking Model Training via keypress.
+ - Advanced Feature Engineering & Robust Data Quality.
+ - Professional Logging & Comprehensive Model Evaluation.
+"""
+
+import time
 import cv2
 import numpy as np
+import numpy.typing as npt
 import datetime
-import mediapipe as mp
 import pandas as pd
 import os
-from openpyxl import Workbook, load_workbook
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from joblib import dump, load
-import collections # For deque to store history for variance, acceleration, plotting
+import collections
+import logging
+from dataclasses import dataclass, field
+from typing import List, Dict, Tuple, Optional, Deque, Any, Union
+# Add this with the other imports at the top of the file (around line 20)
+import tkinter as tk
+from tkinter import filedialog
 
-# Suppress TensorFlow warnings
+# --- Suppress TensorFlow warnings (must be done before importing TF-dependent modules) ---
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-# Initialize MediaPipe Face Mesh
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(
-    static_image_mode=False,
-    max_num_faces=1,
-    refine_landmarks=True,
-    min_detection_confidence=0.5, # Increased for robustness
-    min_tracking_confidence=0.5, # Increased for robustness
-)
+# Attempt imports, allow for graceful failure if libs missing (better for analysis)
+try:
+    import mediapipe as mp
+    from openpyxl import Workbook, load_workbook, worksheet
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import classification_report
+    from joblib import dump, load
+    # Define types for ML objects
+    SklearnModel = Any 
+    SklearnScaler = Any
+    MediapipeFaceMesh = Any
+except ImportError as e:
+     logging.error(f"Missing dependency: {e}. Please install: pip install opencv-python numpy pandas mediapipe openpyxl scikit-learn joblib")
+     # Define placeholder types if imports fail
+     SklearnModel = Any 
+     SklearnScaler = Any
+     MediapipeFaceMesh = Any
+     Workbook = Any
+     worksheet = Any # type: ignore
+     exit(1)
 
-# -----------------------------------------------
-# OPTION 1: Use webcam
-USE_WEBCAM = True
-VIDEO_FILE_PATH = "path/to/your/video.mp4" # Only used if USE_WEBCAM is False
 
-if USE_WEBCAM:
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Error: Could not open webcam.")
-        exit()
-    print("Using webcam input.")
-else:
-    if not os.path.exists(VIDEO_FILE_PATH):
-        print(f"Error: Video file not found at {VIDEO_FILE_PATH}")
-        exit()
-    cap = cv2.VideoCapture(VIDEO_FILE_PATH)
-    if not cap.isOpened():
-        print(f"Error: Could not open video file: {VIDEO_FILE_PATH}.")
-        exit()
-    print(f"Using video file input: {VIDEO_FILE_PATH}")
-# -----------------------------------------------
+# --- Basic Logging Configuration ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Function to calculate Euclidean distance between two 3D points
-def euclidean_distance_3d(point1, point2):
-    return np.sqrt((point1[0] - point2[0])**2 +
-                  (point1[1] - point2[1])**2 +
-                  (point1[2] - point2[2])**2)
 
-# Removed: eye_aspect_ratio_3d function and related EAR landmark indices
+# =============================================================================
+# --- 1. CENTRALIZED CONFIGURATION ---
+# =============================================================================
+# All tunable parameters are here for easy modification.
 
-# Landmark indices for eyes (MediaPipe Face Mesh)
-LEFT_EYE_CENTER_LM = 468 # Left iris center
-RIGHT_EYE_CENTER_LM = 473 # Right iris center
+# --- I/O and File Paths ---
+OUTPUT_DIR: str = r"F:\GP\ML\LiveData" # USE YOUR PATH
+NEW_DATA_FILENAME: str = "LiveData.xlsx"
+OLD_DATA_FILENAME: str = "Live-Old-Data.xlsx"
+MODEL_FILENAME: str = "tremor_model.joblib"
+SCALER_FILENAME: str = "tremor_scaler.joblib"
 
-LEFT_EYE_WIDTH_LMS = [362, 263] # Left eye: inner corner (362) to outer corner (263)
-RIGHT_EYE_WIDTH_LMS = [133, 33]  # Right eye: inner corner (133) to outer corner (33)
+# --- Camera and Processing Settings ---
+USE_WEBCAM: bool = True
+WEBCAM_INDEX: int = 0
+VIDEO_FILE_PATH: str = "path/to/your/video.mp4"
 
-# Initialize tracking variables (3D)
-prev_x_left, prev_y_left, prev_z_left = 0.0, 0.0, 0.0
-prev_x_right, prev_y_right, prev_z_right = 0.0, 0.0, 0.0
+# --- MediaPipe Landmark Indices ---
+# Using named constants for clarity. "Left" and "Right" are from the person's perspective.
+LEFT_IRIS_CENTER: int = 473  # Subject's Left Eye Iris
+RIGHT_IRIS_CENTER: int = 468 # Subject's Right Eye Iris
+# Used for scaling factor - points on outer edges of eyes
+LEFT_EYE_SCALING_PT: int = 362 # Outer corner Subject's Left Eye
+RIGHT_EYE_SCALING_PT: int = 263 # Outer corner Subject's Right Eye
 
-# Velocity history for acceleration calculation (normalized units)
-prev_vx_left, prev_vy_left, prev_vz_left = 0.0, 0.0, 0.0
-prev_vx_right, prev_vy_right, prev_vz_right = 0.0, 0.0, 0.0
 
-# Initialize variables for frequency oscillation tracking (using X-axis velocity for frequency)
-prev_vx_for_freq_left = 0.0 # Storing previous velocities for sign change detection
-prev_vx_for_freq_right = 0.0
-oscillation_count_left_x = 0
-oscillation_count_right_x = 0
+# --- Data Quality and Feature Engineering ---
+FRAME_WARMUP_PERIOD: int = 15 # Frames to let camera/tracking stabilize
+AVG_EYE_WIDTH_MM: float = 24.0 # Used for scaling normalized coordinates to mm
+HISTORY_LEN: int = 30          # Frame window for Variance features
+VELOCITY_SMOOTHING_WINDOW: int = 5 # Frame window for Simple Moving Average (velocity, acceleration)
+VELOCITY_ZERO_THRESHOLD: float = 0.001 # Threshold for zero-crossing frequency count
 
-frame_index = 0
-Time = 0.0 # Total time elapsed (including no-face frames)
-Time_with_face = 0.0 # Time when a face was detected
-
-# Removed: Blink detection variables (EAR_THRESHOLD, BLINK_CONSEC_FRAMES, is_blinking_left, etc.)
-
-# History for variance calculation (normalized displacement, e.g., last 30 frames)
-HISTORY_LEN = 30
-dx_history_left = collections.deque(maxlen=HISTORY_LEN)
-dy_history_left = collections.deque(maxlen=HISTORY_LEN)
-dz_history_left = collections.deque(maxlen=HISTORY_LEN)
-dx_history_right = collections.deque(maxlen=HISTORY_LEN)
-dy_history_right = collections.deque(maxlen=HISTORY_LEN)
-dz_history_right = collections.deque(maxlen=HISTORY_LEN)
-
-# Model and data paths - NOW A LIST TO INCLUDE OLD DATA
-# Ensure these paths are correct for your system
-DATA_PATHS = [
-    r"F:\GP\ML\LiveData\LiveData.xlsx",   # New data will be saved here
-    r"F:\GP\ML\LiveData\Live-Old-Data.xlsx" # Your old data with patients labeled '1'
-]
-MODEL_PATH = 'tremor_model.joblib'
-SCALER_PATH = 'tremor_scaler.joblib'
-
-# Define the full list of features for the ML model (now without blink features)
-ALL_ML_FEATURES = [
-    'Left_Move_Magnitude_mm', 'Right_Move_Magnitude_mm',
-    'Left_Vel_Magnitude_mm_s', 'Right_Vel_Magnitude_mm_s',
-    'Left_Freq_Hz', 'Right_Freq_Hz',
-    'Left_DX_Norm', 'Left_DY_Norm', 'Left_DZ_Norm',
-    'Left_VX_Norm', 'Left_VY_Norm', 'Left_VZ_Norm',
+# --- Machine Learning Feature List ---
+# NOTE: The names here MUST match the keys generated in EyeTracker.get_feature_dict
+ML_FEATURES_LIST: List[str] = [
+    'Left_Move_Magnitude_mm', 'Right_Move_Magnitude_mm', 'Left_Vel_Magnitude_mm_s', 'Right_Vel_Magnitude_mm_s',
+    'Left_Freq_Hz', 'Right_Freq_Hz', 'Left_DX_Norm', 'Left_DY_Norm', 'Left_DZ_Norm',
+    'Left_VX_Norm_Smoothed', 'Left_VY_Norm_Smoothed', 'Left_VZ_Norm_Smoothed',
     'Right_DX_Norm', 'Right_DY_Norm', 'Right_DZ_Norm',
-    'Right_VX_Norm', 'Right_VY_Norm', 'Right_VZ_Norm',
-    'Left_DX_Variance', 'Left_DY_Variance', 'Left_DZ_Variance',
-    'Right_DX_Variance', 'Right_DY_Variance', 'Right_DZ_Variance',
-    'Left_X_Acceleration_Norm', 'Left_Y_Acceleration_Norm', 'Left_Z_Acceleration_Norm',
-    'Right_X_Acceleration_Norm', 'Right_Y_Acceleration_Norm', 'Right_Z_Acceleration_Norm'
+    'Right_VX_Norm_Smoothed', 'Right_VY_Norm_Smoothed', 'Right_VZ_Norm_Smoothed',
+    'Left_DX_Variance', 'Left_DY_Variance', 'Left_DZ_Variance', 'Right_DX_Variance', 'Right_DY_Variance', 'Right_DZ_Variance',
+    'Left_AX_Norm_Smoothed', 'Left_AY_Norm_Smoothed', 'Left_AZ_Norm_Smoothed',
+    'Right_AX_Norm_Smoothed', 'Right_AY_Norm_Smoothed', 'Right_AZ_Norm_Smoothed'
 ]
+ML_CLASS_WEIGHT: str = 'balanced' # Handle imbalanced datasets
+ML_RANDOM_STATE: int = 42
 
-# No features to exclude from ALL_ML_FEATURES anymore, as blink features are already removed
-FEATURES_TO_EXCLUDE = [] 
+# --- Visualization ---
+PLOT_WIDTH: int = 600
+PLOT_HEIGHT: int = 300
+PLOT_HISTORY_LEN: int = 150 # How many points to show on the real-time graph
+MIN_V_PLOT: float = -0.05 # Y-axis range for velocity plot
+MAX_V_PLOT: float = 0.05  # Y-axis range for velocity plot
 
-ML_FEATURES_LIST = [f for f in ALL_ML_FEATURES if f not in FEATURES_TO_EXCLUDE]
-print(f"ML Model will use {len(ML_FEATURES_LIST)} features: {ML_FEATURES_LIST}")
+# Type Aliases
+Point3D = Tuple[float, float, float]
+
+# =============================================================================
+# --- 2. DATA STRUCTURES (Dataclasses) ---
+# =============================================================================
+@dataclass
+class KinematicState:
+    """Robust data structure for a single frame's kinematic results."""
+    # --- Raw / Base ---
+    dx_norm: float = 0.0
+    dy_norm: float = 0.0
+    dz_norm: float = 0.0
+    vx_norm_raw: float = 0.0
+     # --- Smoothed ---
+    vx_norm_smoothed: float = 0.0
+    vy_norm_smoothed: float = 0.0
+    vz_norm_smoothed: float = 0.0
+    ax_norm_smoothed: float = 0.0
+    ay_norm_smoothed: float = 0.0
+    az_norm_smoothed: float = 0.0
+    # --- Derived / Scaled ---
+    move_magnitude_mm: float = 0.0
+    vel_magnitude_mm_s: float = 0.0
+    freq_hz: float = 0.0
+    # --- Variance ---
+    dx_variance: float = 0.0
+    dy_variance: float = 0.0
+    dz_variance: float = 0.0
 
 
-# Initialize model and scaler
-model = None
-scaler = None
+# =============================================================================
+# --- 3. HELPER CLASSES & FUNCTIONS ---
+# =============================================================================
 
-# Try to load a pre-trained model
-try:
-    if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
-        model = load(MODEL_PATH)
-        scaler = load(SCALER_PATH)
-        print("Loaded pre-trained model successfully!")
-        # Verify loaded scaler expects correct number of features
-        if hasattr(scaler, 'n_features_in_') and scaler.n_features_in_ != len(ML_FEATURES_LIST):
-            print(f"WARNING: Loaded scaler expects {scaler.n_features_in_} features, but {len(ML_FEATURES_LIST)} are being provided. Forcing retraining.")
-            raise ValueError("Scaler feature count mismatch")
-    else:
-        raise FileNotFoundError # Force retraining if files are missing
-except Exception as e:
-    print(f"No pre-trained model found or mismatch: {e}. Attempting to train a new model...")
-    
-    combined_df = pd.DataFrame() # Initialize an empty DataFrame to combine all data
-    
-    for path in DATA_PATHS:
-        if os.path.exists(path):
-            print(f"Attempting to load data from: {path}")
-            try:
-                temp_wb = load_workbook(path)
-                # Only load sheets that start with "Session_" for training data
-                sheet_names_to_read = [s for s in temp_wb.sheetnames if s.startswith("Session_")]
-                
-                if not sheet_names_to_read:
-                    print(f"No 'Session_' sheets found in {path}. Skipping this file for training.")
-                else:
-                    print(f"Found sheets in {path} starting with 'Session_': {sheet_names_to_read}") # DEBUG PRINT
-                    for sheet_name in sheet_names_to_read:
-                        sheet_df = pd.read_excel(path, sheet_name=sheet_name)
-                        # Check if sheet is empty or only contains header before adding
-                        if not sheet_df.empty and len(sheet_df.columns) > 1: # Basic check for meaningful data
-                            combined_df = pd.concat([combined_df, sheet_df], ignore_index=True)
-                            print(f"Successfully loaded sheet '{sheet_name}' from {path}. Total rows in combined_df: {len(combined_df)}") # DEBUG PRINT
-                        else:
-                            print(f"Skipping empty or malformed sheet: '{sheet_name}' in {path}.") # DEBUG PRINT
-            except Exception as read_error:
-                print(f"FATAL ERROR: Could not load data from Excel file: {path} - {read_error}.")
-                print(f"Please ENSURE '{path}' is closed, not corrupted, and saved as a proper Excel .xlsx file.")
-                # This error is critical for training, so we'll continue trying other files but note it.
-                model = None # Ensure model is not trained if a critical file fails
-                scaler = None # Ensure scaler is not trained if a critical file fails
-        else:
-            print(f"Training data file not found: {path}. Skipping this file for training.")
+class EyeTracker:
+    """
+    Encapsulates state and kinematic processing for a single eye.
+    Manages history, previous state, and calculations (DRY).
+     """
+    def __init__(self,
+                 eye_label: str,
+                 history_len: int,
+                 smoothing_window: int,
+                 zero_threshold: float):
+        self.label = eye_label
+        self.zero_threshold = zero_threshold
+        # State variables
+        self.prev_pos: Point3D = (0.0, 0.0, 0.0)
+        self.prev_vel_smoothed: Point3D = (0.0, 0.0, 0.0)
+        self.prev_vx_for_freq: float = 0.0
+        self.oscillation_count: int = 0
+         # History Deques for variance
+        self.dx_hist: Deque[float] = collections.deque(maxlen=history_len)
+        self.dy_hist: Deque[float] = collections.deque(maxlen=history_len)
+        self.dz_hist: Deque[float] = collections.deque(maxlen=history_len)
+         # History Deques for smoothing
+        self.vx_hist: Deque[float] = collections.deque(maxlen=smoothing_window)
+        self.vy_hist: Deque[float] = collections.deque(maxlen=smoothing_window)
+        self.vz_hist: Deque[float] = collections.deque(maxlen=smoothing_window)
 
-    # Only try to train if no fatal error prevented it and combined_df is not empty
-    if model is None and not combined_df.empty: 
-        # Ensure all required ML features exist in the combined DataFrame, filling missing with 0.0
-        for feature in ML_FEATURES_LIST:
-            if feature not in combined_df.columns:
-                print(f"WARNING: Feature '{feature}' not found in combined training data. Adding with default value 0.0. "
-                        "This will result in poor model performance unless populated with real data.")
-                combined_df[feature] = 0.0 
+    def process_frame(self,
+                      current_pos: Point3D,
+                      dt: float,
+                      scaling_factor: float,
+                      time_with_face: float) -> KinematicState:
+        """
+        Calculates displacement, velocity, acceleration, variance, frequency.
+        Updates internal state and returns results.
+        """
+        state = KinematicState()
+        if dt <= 1e-6: # Avoid division by zero or near-zero dt
+             # Still update position to avoid jump on next valid frame
+            self.prev_pos = current_pos
+            return state # Return default zero state
+
+        # 1. Displacement
+        dx, dy, dz = np.array(current_pos) - np.array(self.prev_pos)
+        state.dx_norm, state.dy_norm, state.dz_norm = dx, dy, dz
+        self.dx_hist.append(dx)
+        self.dy_hist.append(dy)
+        self.dz_hist.append(dz)
+
+        # 2. Raw and Smoothed Velocity
+        vx, vy, vz = dx / dt, dy / dt, dz / dt
+        state.vx_norm_raw = vx
+        self.vx_hist.append(vx)
+        self.vy_hist.append(vy)
+        self.vz_hist.append(vz)
+        # Simple Moving Average (SMA)
+        vx_s = float(np.mean(self.vx_hist)) if self.vx_hist else 0.0
+        vy_s = float(np.mean(self.vy_hist)) if self.vy_hist else 0.0
+        vz_s = float(np.mean(self.vz_hist)) if self.vz_hist else 0.0
+        state.vx_norm_smoothed, state.vy_norm_smoothed, state.vz_norm_smoothed = vx_s, vy_s, vz_s
+
+        # 3. Smoothed Acceleration (based on smoothed velocity)
+        state.ax_norm_smoothed = (vx_s - self.prev_vel_smoothed[0]) / dt
+        state.ay_norm_smoothed = (vy_s - self.prev_vel_smoothed[1]) / dt
+        state.az_norm_smoothed = (vz_s - self.prev_vel_smoothed[2]) / dt
+
+        # 4. Magnitudes (mm and mm/s)
+        state.move_magnitude_mm = float(np.linalg.norm([dx, dy, dz])) * scaling_factor
+        state.vel_magnitude_mm_s = float(np.linalg.norm([vx_s, vy_s, vz_s])) * scaling_factor
+
+        # 5. Frequency (Zero-Crossing detection on RAW velocity X)
+        cross_up = (vx > self.zero_threshold and self.prev_vx_for_freq < -self.zero_threshold)
+        cross_down = (vx < -self.zero_threshold and self.prev_vx_for_freq > self.zero_threshold)
+        if cross_up or cross_down:
+             self.oscillation_count += 1
+        # A full cycle is 2 crossings; Hz = cycles / second
+        state.freq_hz = (self.oscillation_count / 2) / time_with_face if time_with_face > 0.5 else 0.0 # Wait 0.5s
+
+        # 6. Variance
+        state.dx_variance = float(np.var(self.dx_hist)) if self.dx_hist else 0.0
+        state.dy_variance = float(np.var(self.dy_hist)) if self.dy_hist else 0.0
+        state.dz_variance = float(np.var(self.dz_hist)) if self.dz_hist else 0.0
         
-        # Add Label column if missing
-        if 'Label' not in combined_df.columns:
-            print("WARNING: 'Label' column not found in training data. Adding with default value 0. "
-                    "Please label your data (0 or 1 for example) for effective training.")
-            combined_df['Label'] = 0 
-        
-        # Drop rows with any missing values for relevant columns
-        columns_for_dropna = ML_FEATURES_LIST + ['Label']
-        # Filter columns_for_dropna to only include columns that actually exist in combined_df.columns
-        existing_cols_for_dropna = [col for col in columns_for_dropna if col in combined_df.columns]
-        combined_df = combined_df.dropna(subset=existing_cols_for_dropna)
-        
-        if len(combined_df) == 0:
-            print("No valid data rows after dropping NaNs. Cannot train model.")
-            model = None
-            scaler = None
-        else:
-            X = combined_df[ML_FEATURES_LIST]
-            y = combined_df['Label']
-            
-            # --- DEBUGGING STEP: Print unique labels and their counts ---
-            print(f"\n--- Training Data Labels Found ---")
-            print(f"Total rows for training: {len(y)}")
-            print(f"Unique labels and their counts:\n{y.value_counts()}") # Changed to print on new line for clarity
-            print(f"---------------------------------\n")
+        # 7. IMPORTANT: Update internal state for the *next* frame
+        self.prev_pos = current_pos
+        self.prev_vel_smoothed = (vx_s, vy_s, vz_s)
+        self.prev_vx_for_freq = vx # use raw vx for next zero-crossing check
 
-            # Check if there's enough data for splitting and if y has at least two classes
-            if len(X) < 2 or len(y.unique()) < 2:
-                print(f"Not enough data ({len(X)} rows) or unique classes ({len(y.unique())}) for effective training. "
-                        "Need at least 2 rows and 2 classes (e.g., 0 and 1) in the 'Label' column. Model training skipped.")
-                model = None
-                scaler = None
-            else:
-                # Split the dataset into training and testing sets, stratifying to maintain class balance
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=0.2, random_state=42, stratify=y
-                )
-                
-                # Scale features
-                scaler = StandardScaler()
-                X_train_scaled = scaler.fit_transform(X_train)
-                X_test_scaled = scaler.transform(X_test)
-                
-                # Train the RandomForest model
-                model = RandomForestClassifier(
-                    n_estimators=100,
-                    max_depth=5,
-                    random_state=42,
-                    class_weight='balanced' # Helps with imbalanced classes
-                )
-                model.fit(X_train_scaled, y_train)
-                
-                # Save the trained model and scaler
-                dump(model, MODEL_PATH)
-                dump(scaler, SCALER_PATH)
-                print(f"New model trained successfully! Accuracy: {model.score(X_test_scaled, y_test):.2f}")
-                
-    else: # This branch is taken if combined_df is empty or a FATAL_ERROR occurred
-        print("No valid data collected across all specified data paths for training. Real-time predictions are disabled.")
-        model = None
-        scaler = None
+        return state
 
-# Define the Excel output header explicitly, including all ML features and 'Label'
-# Filter out the excluded features from the displayed columns too
-EXCEL_OUTPUT_HEADER_BASE = [
-    "Index", "Time (s)", "TimeWithFace",
-    "LeftMove(mm)", "RightMove(mm)",
-    "LeftVel(mm/s)", "RightVel(mm/s)",
-    "LeftFreq(Hz)", "RightFreq(Hz)", # Frequency is now X-vel based
-    "LeftAmp(mm)", "RightAmp(mm)"
-]
+    def get_feature_dict(self, state: KinematicState) -> Dict[str, float]:
+         """Converts KinematicState + Label to dictionary for ML feature list."""
+         # Use attribute access (state.dx_norm) which is safer than dict.get()
+         return {
+            f'{self.label}_Move_Magnitude_mm': state.move_magnitude_mm,
+            f'{self.label}_Vel_Magnitude_mm_s': state.vel_magnitude_mm_s,
+            f'{self.label}_Freq_Hz': state.freq_hz,
+            f'{self.label}_DX_Norm': state.dx_norm,
+            f'{self.label}_DY_Norm': state.dy_norm,
+            f'{self.label}_DZ_Norm': state.dz_norm,
+            f'{self.label}_VX_Norm_Smoothed': state.vx_norm_smoothed,
+            f'{self.label}_VY_Norm_Smoothed': state.vy_norm_smoothed,
+            f'{self.label}_VZ_Norm_Smoothed': state.vz_norm_smoothed,
+            f'{self.label}_DX_Variance': state.dx_variance,
+            f'{self.label}_DY_Variance': state.dy_variance,
+            f'{self.label}_DZ_Variance': state.dz_variance,
+             f'{self.label}_AX_Norm_Smoothed': state.ax_norm_smoothed,
+             f'{self.label}_AY_Norm_Smoothed': state.ay_norm_smoothed,
+             f'{self.label}_AZ_Norm_Smoothed': state.az_norm_smoothed,
+         }
 
-# Construct the final EXCEL_OUTPUT_HEADER based on ML_FEATURES_LIST (which is now ALL_ML_FEATURES without blink features)
-EXCEL_OUTPUT_HEADER = EXCEL_OUTPUT_HEADER_BASE + ML_FEATURES_LIST + ["Prediction", "Label"]
+# --- ML Functions ---
 
-# Initialize data list with the combined header
-data_for_excel = [EXCEL_OUTPUT_HEADER]
+def load_model_and_scaler(
+      model_path: str,
+      scaler_path: str,
+      feature_count: int
+      ) -> Tuple[Optional[SklearnModel], Optional[SklearnScaler]]:
+      """Loads model and scaler, validates feature count."""
+      model, scaler = None, None
+      try:
+          model_load, scaler_load = load(model_path), load(scaler_path)
+          # Validation
+          if not hasattr(scaler_load, 'n_features_in_') or scaler_load.n_features_in_ != feature_count:
+              raise ValueError(f"Scaler feature count ({getattr(scaler_load, 'n_features_in_', 'N/A')}) mismatch. Expected {feature_count}. Retraining required.")
+          if not hasattr(model_load, 'n_features_in_') or model_load.n_features_in_ != feature_count:
+               raise ValueError(f"Model feature count ({getattr(model_load, 'n_features_in_', 'N/A')}) mismatch. Expected {feature_count}. Retraining required.")
 
-# Real-time graph visualization variables
-PLOT_WIDTH, PLOT_HEIGHT = 600, 300
-plot_img = np.zeros((PLOT_HEIGHT, PLOT_WIDTH, 3), dtype=np.uint8)
-plot_history_len = 200 # Number of frames to show in graph
-vx_left_plot_history = collections.deque(maxlen=plot_history_len)
-vy_left_plot_history = collections.deque(maxlen=plot_history_len)
-vx_right_plot_history = collections.deque(maxlen=plot_history_len)
-vy_right_plot_history = collections.deque(maxlen=plot_history_len)
-
-# Min/Max for plotting normalized velocities (adjust as needed based on observed values)
-MAX_VELOCITY_PLOT = 0.05
-MIN_VELOCITY_PLOT = -0.05
-
-def normalize_for_plot(value, min_val, max_val, plot_height):
-    # Scale value to fit within plot_height (0 to plot_height)
-    if max_val == min_val: return plot_height // 2 # Avoid division by zero
-    normalized_value = (value - min_val) / (max_val - min_val)
-    # Invert y-axis for plot: 0 at top, plot_height at bottom
-    return int(plot_height - normalized_value * plot_height)
-
-# Main processing loop
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("End of video or error reading frame.")
-        break
-    
-    frame = cv2.flip(frame, 1) # Flip horizontally for webcam
-    h, w, _ = frame.shape
-    
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(rgb_frame)
-    
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    frame_time = 1 / fps
-    
-    # Initialize prediction text to "No face detected" by default
-    prediction_text = "No face detected"
-    
-    # Initialize all features to 0.0 or default values for the current frame
-    current_left_move_mm = 0.0
-    current_right_move_mm = 0.0
-    current_left_vel_mm_s = 0.0
-    current_right_vel_mm_s = 0.0
-    current_left_freq_hz = 0.0 
-    current_right_freq_hz = 0.0 
-    current_left_amp_mm = 0.0
-    current_right_amp_mm = 0.0
-
-    left_dx_norm, left_dy_norm, left_dz_norm = 0.0, 0.0, 0.0
-    left_vx_norm, left_vy_norm, left_vz_norm = 0.0, 0.0, 0.0
-    right_dx_norm, right_dy_norm, right_dz_norm = 0.0, 0.0, 0.0
-    right_vx_norm, right_vy_norm, right_vz_norm = 0.0, 0.0, 0.0
-
-    left_dx_var, left_dy_var, left_dz_var = 0.0, 0.0, 0.0
-    right_dx_var, right_dy_var, right_dz_var = 0.0, 0.0, 0.0
-
-    left_ax_norm, left_ay_norm, left_az_norm = 0.0, 0.0, 0.0
-    right_ax_norm, right_ay_norm, right_az_norm = 0.0, 0.0, 0.0
-
-    face_detected_this_frame = False
-    
-    # Initialize raw_features_map with zeros. This will be used for Excel output
-    raw_features_map = {feature: 0.0 for feature in ALL_ML_FEATURES}
-
-    if results.multi_face_landmarks:
-        face_detected_this_frame = True
-        Time_with_face += frame_time
-        
-        for face_landmarks in results.multi_face_landmarks:
-            left_eye_center_3d = (
-                face_landmarks.landmark[LEFT_EYE_CENTER_LM].x,
-                face_landmarks.landmark[LEFT_EYE_CENTER_LM].y,
-                face_landmarks.landmark[LEFT_EYE_CENTER_LM].z
-            )
-            left_eye_width_point1 = (
-                face_landmarks.landmark[LEFT_EYE_WIDTH_LMS[0]].x,
-                face_landmarks.landmark[LEFT_EYE_WIDTH_LMS[0]].y,
-                face_landmarks.landmark[LEFT_EYE_WIDTH_LMS[0]].z
-            )
-            left_eye_width_point2 = (
-                face_landmarks.landmark[LEFT_EYE_WIDTH_LMS[1]].x,
-                face_landmarks.landmark[LEFT_EYE_WIDTH_LMS[1]].y,
-                face_landmarks.landmark[LEFT_EYE_WIDTH_LMS[1]].z
-            )
-            
-            right_eye_center_3d = (
-                face_landmarks.landmark[RIGHT_EYE_CENTER_LM].x,
-                face_landmarks.landmark[RIGHT_EYE_CENTER_LM].y,
-                face_landmarks.landmark[RIGHT_EYE_CENTER_LM].z
-            )
-            right_eye_width_point1 = (
-                face_landmarks.landmark[RIGHT_EYE_WIDTH_LMS[0]].x,
-                face_landmarks.landmark[RIGHT_EYE_WIDTH_LMS[0]].y,
-                face_landmarks.landmark[RIGHT_EYE_WIDTH_LMS[0]].z
-            )
-            right_eye_width_point2 = (
-                face_landmarks.landmark[RIGHT_EYE_WIDTH_LMS[1]].x,
-                face_landmarks.landmark[RIGHT_EYE_WIDTH_LMS[1]].y,
-                face_landmarks.landmark[RIGHT_EYE_WIDTH_LMS[1]].z
-            )
-            
-            left_eye_width_3d = euclidean_distance_3d(left_eye_width_point1, left_eye_width_point2)
-            right_eye_width_3d = euclidean_distance_3d(right_eye_width_point1, right_eye_width_point2)
-            
-            if left_eye_width_3d < 1e-6: left_eye_width_3d = 1e-6
-            if right_eye_width_3d < 1e-6: right_eye_width_3d = 1e-6
-
-            SCALING_FACTOR_MM_PER_NORM_UNIT = 24 / left_eye_width_3d # Use left eye for a common factor
-            
-            # Normalized displacements (current - previous)
-            left_dx_norm = left_eye_center_3d[0] - prev_x_left
-            left_dy_norm = left_eye_center_3d[1] - prev_y_left
-            left_dz_norm = left_eye_center_3d[2] - prev_z_left
-            
-            right_dx_norm = right_eye_center_3d[0] - prev_x_right
-            right_dy_norm = right_eye_center_3d[1] - prev_y_right
-            right_dz_norm = right_eye_center_3d[2] - prev_z_right
-            
-            # Convert overall displacement magnitude to 'mm' for Excel columns
-            current_left_move_mm = euclidean_distance_3d((0,0,0), (left_dx_norm, left_dy_norm, left_dz_norm)) * SCALING_FACTOR_MM_PER_NORM_UNIT
-            current_right_move_mm = euclidean_distance_3d((0,0,0), (right_dx_norm, right_dy_norm, right_dz_norm)) * SCALING_FACTOR_MM_PER_NORM_UNIT
-            
-            # Normalized Velocities and Accelerations
-            if frame_time > 0:
-                left_vx_norm = left_dx_norm / frame_time
-                left_vy_norm = left_dy_norm / frame_time
-                left_vz_norm = left_dz_norm / frame_time
-                
-                right_vx_norm = right_dx_norm / frame_time
-                right_vy_norm = right_dy_norm / frame_time
-                right_vz_norm = right_dz_norm / frame_time
-
-                # Current velocities in mm/s for Excel output (magnitude)
-                current_left_vel_mm_s = euclidean_distance_3d((0,0,0), (left_vx_norm, left_vy_norm, left_vz_norm)) * SCALING_FACTOR_MM_PER_NORM_UNIT
-                current_right_vel_mm_s = euclidean_distance_3d((0,0,0), (right_vx_norm, right_vy_norm, right_vz_norm)) * SCALING_FACTOR_MM_PER_NORM_UNIT
-
-                # Accelerations (normalized units)
-                left_ax_norm = (left_vx_norm - prev_vx_left) / frame_time
-                left_ay_norm = (left_vy_norm - prev_vy_left) / frame_time
-                left_az_norm = (left_vz_norm - prev_vz_left) / frame_time
-
-                right_ax_norm = (right_vx_norm - prev_vx_right) / frame_time
-                right_ay_norm = (right_vy_norm - prev_vy_right) / frame_time
-                right_az_norm = (right_vz_norm - prev_vz_right) / frame_time
-            else:
-                left_vx_norm, left_vy_norm, left_vz_norm = 0.0, 0.0, 0.0
-                right_vx_norm, right_vy_norm, right_vz_norm = 0.0, 0.0, 0.0
-                left_ax_norm, left_ay_norm, left_az_norm = 0.0, 0.0, 0.0
-                right_ax_norm, right_ay_norm, right_az_norm = 0.0, 0.0, 0.0
-            
-            # --- Oscillation Count and Frequency (FIXED) ---
-            # Count sign changes of X-velocity for frequency estimation
-            # A 0.0 threshold is used to filter out noise near zero velocity.
-            VELOCITY_ZERO_THRESHOLD = 0.001 # Small threshold to avoid noisy zero-crossings
-            
-            if (left_vx_norm > VELOCITY_ZERO_THRESHOLD and prev_vx_for_freq_left < -VELOCITY_ZERO_THRESHOLD) or \
-               (left_vx_norm < -VELOCITY_ZERO_THRESHOLD and prev_vx_for_freq_left > VELOCITY_ZERO_THRESHOLD):
-                oscillation_count_left_x += 1
-            
-            if (right_vx_norm > VELOCITY_ZERO_THRESHOLD and prev_vx_for_freq_right < -VELOCITY_ZERO_THRESHOLD) or \
-               (right_vx_norm < -VELOCITY_ZERO_THRESHOLD and prev_vx_for_freq_right > VELOCITY_ZERO_THRESHOLD):
-                oscillation_count_right_x += 1
-            
-            # Update previous velocities for frequency calculation for next frame
-            prev_vx_for_freq_left = left_vx_norm
-            prev_vx_for_freq_right = right_vx_norm
-
-            # Frequency for Excel output (using X-axis oscillation)
-            # Divide by 2 because each full oscillation cycle has two zero-crossings (e.g., pos to neg, neg to pos)
-            current_left_freq_hz = (oscillation_count_left_x / 2) / Time_with_face if Time_with_face > 0 else 0.0
-            current_right_freq_hz = (oscillation_count_right_x / 2) / Time_with_face if Time_with_face > 0 else 0.0
-
-            # Amplitude for Excel (using magnitude of overall displacement)
-            current_left_amp_mm = abs(current_left_move_mm)
-            current_right_amp_mm = abs(current_right_move_mm)
-
-            # Variance Calculation (for ML)
-            dx_history_left.append(left_dx_norm)
-            dy_history_left.append(left_dy_norm)
-            dz_history_left.append(left_dz_norm)
-            dx_history_right.append(right_dx_norm)
-            dy_history_right.append(right_dy_norm)
-            dz_history_right.append(right_dz_norm)
-
-            if len(dx_history_left) > 1:
-                left_dx_var = np.var(list(dx_history_left))
-                left_dy_var = np.var(list(dy_history_left))
-                left_dz_var = np.var(list(dz_history_left))
-                right_dx_var = np.var(list(dx_history_right))
-                right_dy_var = np.var(list(dy_history_right))
-                right_dz_var = np.var(list(dz_history_right))
-            else:
-                left_dx_var, left_dy_var, left_dz_var = 0.0, 0.0, 0.0
-                right_dx_var, right_dy_var, right_dz_var = 0.0, 0.0, 0.0
-
-            # Removed: Blink Detection logic and EAR calculations
-
-            # Populate raw_features_map with current computed values
-            raw_features_map = {
-                'Left_Move_Magnitude_mm': current_left_move_mm,
-                'Right_Move_Magnitude_mm': current_right_move_mm,
-                'Left_Vel_Magnitude_mm_s': current_left_vel_mm_s,
-                'Right_Vel_Magnitude_mm_s': current_right_vel_mm_s,
-                'Left_Freq_Hz': current_left_freq_hz,
-                'Right_Freq_Hz': current_right_freq_hz,
-                'Left_DX_Norm': left_dx_norm,
-                'Left_DY_Norm': left_dy_norm,
-                'Left_DZ_Norm': left_dz_norm,
-                'Left_VX_Norm': left_vx_norm,
-                'Left_VY_Norm': left_vy_norm,
-                'Left_VZ_Norm': left_vz_norm,
-                'Right_DX_Norm': right_dx_norm,
-                'Right_DY_Norm': right_dy_norm,
-                'Right_DZ_Norm': right_dz_norm,
-                'Right_VX_Norm': right_vx_norm,
-                'Right_VY_Norm': right_vy_norm,
-                'Right_VZ_Norm': right_vz_norm,
-                'Left_DX_Variance': left_dx_var,
-                'Left_DY_Variance': left_dy_var,
-                'Left_DZ_Variance': left_dz_var,
-                'Right_DX_Variance': right_dx_var,
-                'Right_DY_Variance': right_dy_var,
-                'Right_DZ_Variance': right_dz_var,
-                'Left_X_Acceleration_Norm': left_ax_norm,
-                'Left_Y_Acceleration_Norm': left_ay_norm,
-                'Left_Z_Acceleration_Norm': left_az_norm,
-                'Right_X_Acceleration_Norm': right_ax_norm,
-                'Right_Y_Acceleration_Norm': right_ay_norm,
-                'Right_Z_Acceleration_Norm': right_az_norm
-            }
-
-            current_features_for_ml = [raw_features_map[feature_name] for feature_name in ML_FEATURES_LIST]
-            
-            # Make a prediction if the model and scaler are loaded
-            if model and scaler: # Check if model and scaler are loaded first
-                if len(current_features_for_ml) == len(ML_FEATURES_LIST): # Then check feature count
-                    try:
-                        scaled_features = scaler.transform([current_features_for_ml])
-                        pred = model.predict(scaled_features)
-                        proba = model.predict_proba(scaled_features)[0]
-                        prediction_text = f"State: {pred[0]} ({np.max(proba):.2f})"
-                    except Exception as e:
-                        prediction_text = f"Prediction error: {str(e)}"
-                else:
-                    prediction_text = "Feature mismatch for prediction" # Should not happen if ML_FEATURES_LIST is consistent
-            else:
-                prediction_text = "Model not ready for prediction"
-            
-            # Update previous values for the next frame (ONLY if face was detected)
-            prev_x_left, prev_y_left, prev_z_left = left_eye_center_3d
-            prev_x_right, prev_y_right, prev_z_right = right_eye_center_3d
-            
-            prev_vx_left, prev_vy_left, prev_vz_left = left_vx_norm, left_vy_norm, left_vz_norm
-            prev_vx_right, prev_vy_right, prev_vz_right = right_vx_norm, right_vy_norm, right_vz_norm
-    else: # No face detected
-        # If no face is detected, current_features_for_ml would be empty.
-        # Ensure it's populated with default zeros for data consistency in Excel output.
-        current_features_for_ml = [0.0] * len(ML_FEATURES_LIST)
-        # raw_features_map is already initialized to 0.0 at the start of the loop for this scenario
+          model, scaler = model_load, scaler_load
+          logging.info(f"Loaded pre-trained model and scaler successfully from {model_path}.")
+      except FileNotFoundError:
+           logging.warning(f"Model or scaler file not found at {os.path.dirname(model_path)}.")
+      except Exception as e:
+          logging.warning(f"Could not load or validate pre-trained model/scaler ({e}).")
+      return model, scaler
 
 
-    # Collect data for each frame for Excel
-    # Assemble the row based on the EXCEL_OUTPUT_HEADER structure
-    row_data_values = []
-    temp_dict_for_excel_output = {
-        "Index": frame_index,
-        "Time (s)": Time,
-        "TimeWithFace": Time_with_face,
-        "LeftMove(mm)": current_left_move_mm,
-        "RightMove(mm)": current_right_move_mm,
-        "LeftVel(mm/s)": current_left_vel_mm_s,
-        "RightVel(mm/s)": current_right_vel_mm_s,
-        "LeftFreq(Hz)": current_left_freq_hz,
-        "RightFreq(Hz)": current_right_freq_hz,
-        "LeftAmp(mm)": current_left_amp_mm,
-        "RightAmp(mm)": current_right_amp_mm,
-        "Prediction": prediction_text,
-        "Label": 0 # Default label for new data collected
-    }
-    # Populate temp_dict_for_excel_output with all ML features from raw_features_map (which holds all computed or zeroed values)
-    for feature_name in ALL_ML_FEATURES:
-        temp_dict_for_excel_output[feature_name] = raw_features_map.get(feature_name, 0.0)
-
-
-    # Build the row based on EXCEL_OUTPUT_HEADER (which respects FEATURES_TO_EXCLUDE)
-    for header_col in EXCEL_OUTPUT_HEADER:
-        row_data_values.append(temp_dict_for_excel_output.get(header_col, 0.0)) # Use .get() with default for safety
-
-    data_for_excel.append(row_data_values)
-    
-    # Real-Time Graph Visualization
-    # Update plot history (using normalized velocities for consistency)
-    vx_left_plot_history.append(left_vx_norm)
-    vy_left_plot_history.append(left_vy_norm) 
-    vx_right_plot_history.append(right_vx_norm)
-    vy_right_plot_history.append(right_vy_norm)
-
-    # Redraw plot
-    plot_img.fill(0) # Clear previous frame
-
-    # Draw grid lines for readability
-    cv2.line(plot_img, (0, PLOT_HEIGHT // 2), (PLOT_WIDTH, PLOT_HEIGHT // 2), (50, 50, 50), 1) # X-axis line (zero velocity)
-    cv2.line(plot_img, (PLOT_WIDTH // 2, 0), (PLOT_WIDTH // 2, PLOT_HEIGHT), (50, 50, 50), 1) # Y-axis line
-
-    # Draw velocity plots
-    plot_img_labels = [] # To manage legend position
-    def draw_plot_line(history, color, label):
-        if len(history) > 1:
-            for i in range(1, len(history)):
-                p1_x = int((i - 1) * PLOT_WIDTH / plot_history_len)
-                p1_y = normalize_for_plot(history[i-1], MIN_VELOCITY_PLOT, MAX_VELOCITY_PLOT, PLOT_HEIGHT)
-                p2_x = int(i * PLOT_WIDTH / plot_history_len)
-                p2_y = normalize_for_plot(history[i], MIN_VELOCITY_PLOT, MAX_VELOCITY_PLOT, PLOT_HEIGHT)
-                cv2.line(plot_img, (p1_x, p1_y), (p2_x, p2_y), color, 1)
-        cv2.putText(plot_img, label, (10, 20 + 20 * len(plot_img_labels)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-        plot_img_labels.append(None) # Just to manage vertical spacing for legend
-
-    draw_plot_line(vx_left_plot_history, (0, 255, 0), "L_VX (G)")    # Green for Left VX
-    draw_plot_line(vy_left_plot_history, (255, 0, 0), "L_VY (B)")    # Blue for Left VY
-    draw_plot_line(vx_right_plot_history, (0, 255, 255), "R_VX (C)") # Cyan for Right VX
-    draw_plot_line(vy_right_plot_history, (255, 0, 255), "R_VY (M)") # Magenta for Right VY
-
-    cv2.putText(plot_img, f"Min: {MIN_VELOCITY_PLOT:.2f}", (10, PLOT_HEIGHT - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-    cv2.putText(plot_img, f"Max: {MAX_VELOCITY_PLOT:.2f}", (10, PLOT_HEIGHT - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-
-    cv2.imshow("Eye Velocity Graph", plot_img)
-    
-    # Display the prediction on the main frame
-    cv2.putText(frame, prediction_text, (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    
-    cv2.imshow("Tremor Detection", frame)
-    
-    Time += frame_time
-    frame_index += 1
-    
-    if cv2.waitKey(1) & 0xFF == 27:
-        break
-
-# Save results to Excel
-output_dir = r"F:\GP\ML\LiveData" # Ensure this directory exists or is writable
-os.makedirs(output_dir, exist_ok=True)
-output_file = os.path.join(output_dir, "LiveData.xlsx") # This is fixed to LiveData.xlsx for saving new data
-
-try:
-    # Always load from LiveData.xlsx for saving new sessions
-    if not os.path.exists(output_file):
-        print(f"Creating new Excel file for saving: {output_file}")
-        wb = Workbook()
-        ws_init = wb.active
-        ws_init.title = "Initial Sheet" # Default sheet name
-        wb.save(output_file)
-        wb = load_workbook(output_file) # Re-load to ensure it's loaded correctly
-        if "Initial Sheet" in wb.sheetnames:
-            wb.remove(wb["Initial Sheet"])
-    else:
+def train_new_model(
+        data_paths: List[str],
+        feature_list: List[str],
+        model_path: str,
+        scaler_path: str
+       ) -> Tuple[Optional[SklearnModel], Optional[SklearnScaler]]:
+    """Loads data, cleans it, and trains/saves a new ML model & scaler."""
+    logging.info("--- Attempting to Train New Model ---")
+    combined_df = pd.DataFrame()
+    valid_sheets_found = 0
+    for path in data_paths:
+        if not os.path.exists(path):
+            logging.warning(f"Training data file not found: {path}. Skipping.")
+            continue
         try:
-            wb = load_workbook(output_file)
-        except Exception as load_error:
-            print(f"FATAL ERROR: Could not load existing Excel file for saving: {output_file} - {load_error}. This might indicate corruption or wrong format.")
-            print(f"Please ENSURE '{output_file}' is closed, not corrupted, and saved as a proper Excel .xlsx file.")
-            print("To fix, you may need to delete or rename the old 'LiveData.xlsx' and let the script create a new one.")
-            raise # Re-raise the exception to stop execution and alert the user
+            # Check if file is a valid Excel file
+            excel_file = pd.ExcelFile(path)
+            sheet_names = [s for s in excel_file.sheet_names if s.startswith("Session_")]
+            if not sheet_names:
+                 logging.warning(f"No 'Session_' sheets found in {path}. Skipping.")
+                 continue
+                 
+            for sheet_name in sheet_names:
+                # IMPORTANT: Skip first calculated row which can have initialization artifacts.
+                # Row 0=header, Row 1=first data, which might be a jump from (0,0,0)
+                sheet_df = pd.read_excel(path, sheet_name=sheet_name, skiprows=[1]) 
+                if not sheet_df.empty and 'Label' in sheet_df.columns:
+                    combined_df = pd.concat([combined_df, sheet_df], ignore_index=True)
+                    valid_sheets_found +=1
+        except Exception as e:
+            logging.error(f"Could not read or parse Excel file {path}: {e}. Skipping.")
 
+    if combined_df.empty or valid_sheets_found == 0:
+        logging.error("No valid training data found across all paths/sheets. Model training aborted.")
+        return None, None
 
-    sheet_name = f"Session_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    ws = wb.create_sheet(title=sheet_name)
-    
-    for row in data_for_excel:
-        ws.append(row)
+    # Data Cleaning & Validation
+    missing_features = [f for f in feature_list if f not in combined_df.columns]
+    for feature in missing_features:
+        logging.warning(f"Feature '{feature}' not in data. Filling with 0.0.")
+        combined_df[feature] = 0.0
         
-    wb.save(output_file)
-    print(f"Data saved successfully to {output_file} under sheet: {sheet_name}")
+    if 'Label' not in combined_df.columns:
+        logging.error("'Label' column not found in data. Cannot train. Aborting.")
+        return None, None
+        
+    # Drop rows with ANY NaN in the features or label
+    original_rows = len(combined_df)
+    combined_df.dropna(subset=feature_list + ['Label'], inplace=True)
+    # Replace infinite values with NaN and drop again
+    combined_df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    combined_df.dropna(subset=feature_list + ['Label'], inplace=True)
     
-except Exception as e:
-    print(f"Error saving data: {str(e)}")
+    logging.info(f"Training rows: {original_rows} original, {len(combined_df)} after cleaning (NaN/Inf removal).")
 
-cap.release()
-cv2.destroyAllWindows()
-print("Application terminated.")
+    num_classes = combined_df['Label'].nunique()
+    if len(combined_df) < 50 or num_classes < 2:
+        logging.error(f"Insufficient data ({len(combined_df)} rows) or classes ({num_classes}) for robust training. Need >= 50 rows and >= 2 classes.")
+        return None, None
+
+    X = combined_df[feature_list]
+    y = combined_df['Label'].astype(int) # Ensure labels are integers
+    logging.info(f"Training data label distribution:\n{y.value_counts().to_string()}")
+
+    try:
+       # stratify ensures train/test sets have similar class proportions
+       X_train, X_test, y_train, y_test = train_test_split(
+           X, y, test_size=0.25, random_state=ML_RANDOM_STATE, stratify=y, shuffle=True)
+    except ValueError as e:
+        logging.error(f"Stratified split failed (e.g., a class has only 1 member): {e}. Aborting.")
+        return None, None
+        
+    scaler = StandardScaler().fit(X_train)
+    model = RandomForestClassifier(
+        n_estimators=100, max_depth=12, random_state=ML_RANDOM_STATE, class_weight=ML_CLASS_WEIGHT, n_jobs=-1)
+    
+    X_train_scaled = scaler.transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    model.fit(X_train_scaled, y_train)
+
+    # Professional Evaluation
+    y_pred = model.predict(X_test_scaled)
+    # zero_division=0 prevents warnings if a class is not predicted at all
+    report = classification_report(y_test, y_pred, zero_division=0) 
+    logging.info(f"\n--- Model Evaluation Report (on Test Set) ---\n{report}")
+
+    # Save artifacts
+    try:
+       os.makedirs(os.path.dirname(model_path), exist_ok=True)
+       dump(model, model_path)
+       dump(scaler, scaler_path)
+       logging.info(f"New model and scaler saved to {os.path.dirname(model_path)}")
+    except Exception as e:
+       logging.error(f"Failed to save model/scaler to {os.path.dirname(model_path)}: {e}")
+       # return model anyway so app can use it for the current session
+       
+    return model, scaler
+
+# --- Data Saving Function ---
+def save_data_to_excel(output_path: str, data_rows: List[List[Any]]) -> None:
+     """Saves collected data frame-by-frame to a new sheet in an Excel file."""
+     if not data_rows or len(data_rows) <=1: # Only header or no data
+         logging.warning("No data collected to save.")
+         return
+     try:
+        logging.info(f"Attempting to save {len(data_rows)-1} data rows to {output_path}...")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        wb: Workbook
+        if os.path.exists(output_path):
+            wb = load_workbook(output_path)
+        else:
+            wb = Workbook()
+            # Remove default sheet if it exists
+            if "Sheet" in wb.sheetnames:
+                 wb.remove(wb["Sheet"]) 
+
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Ensure sheet name is unique if saving very quickly
+        sheet_title_base = f"Session_{timestamp}"
+        sheet_title = sheet_title_base
+        counter = 1
+        while sheet_title in wb.sheetnames:
+            sheet_title = f"{sheet_title_base}_{counter}"
+            counter +=1
+            
+        ws: worksheet.worksheet.Worksheet = wb.create_sheet(title=sheet_title)
+        for row in data_rows:
+            ws.append(row)
+        wb.save(output_path)
+        logging.info(f"Data saved successfully to sheet '{sheet_title}'.")
+     except PermissionError:
+          logging.critical(f"FATAL: Permission denied saving {output_path}. Is the file open elsewhere?")
+     except Exception as e:
+        logging.critical(f"FATAL: Could not save to Excel file {output_path}. Error: {e}", exc_info=True)
+
+# --- Visualization Function ---
+def normalize_for_plot(value: float, min_val: float, max_val: float, height: int) -> int:
+    """Scales a data value to fit within the pixel height of the plot."""
+    # Clip value to range to prevent lines going off canvas
+    value_clipped = max(min_val, min(max_val, value))
+    range_val = max_val - min_val
+    if range_val < 1e-6: # Avoid division by zero if min==max
+        return height // 2
+    # Calculate position and invert (0 is top in OpenCV)
+    return int(height - ((value_clipped - min_val) / range_val) * height)
+
+
+# =============================================================================
+# --- 4. MAIN APPLICATION CLASS ---
+# =============================================================================
+
+class Application:
+    """Manages the main application loop, resources, and state."""
+    def __init__(self):
+        logging.info("Initializing Nystagmus Analysis Application...")
+        self.output_dir = OUTPUT_DIR
+        self.data_paths: List[str] = [os.path.join(self.output_dir, NEW_DATA_FILENAME),
+                                      os.path.join(self.output_dir, OLD_DATA_FILENAME)]
+        self.model_path: str = os.path.join(self.output_dir, MODEL_FILENAME)
+        self.scaler_path: str = os.path.join(self.output_dir, SCALER_FILENAME)
+        self.save_path: str = os.path.join(self.output_dir, NEW_DATA_FILENAME)
+
+        self.mp_face_mesh = mp.solutions.face_mesh
+        self.face_mesh: Optional[MediapipeFaceMesh] = None
+        self.cap: Optional[cv2.VideoCapture] = None
+        self.model: Optional[SklearnModel] = None
+        self.scaler: Optional[SklearnScaler] = None
+
+        # Instantiate Trackers
+        self.tracker_left = EyeTracker("Left", HISTORY_LEN, VELOCITY_SMOOTHING_WINDOW, VELOCITY_ZERO_THRESHOLD)
+        self.tracker_right = EyeTracker("Right", HISTORY_LEN, VELOCITY_SMOOTHING_WINDOW, VELOCITY_ZERO_THRESHOLD)
+        
+        # State
+        self.frame_index: int = 0
+        self.total_time: float = 0.0
+        self.time_with_face: float = 0.0
+        self.last_timestamp: float = time.time()
+        
+        # Data Collection & Plotting
+        self.excel_header: List[str] = ["Index", "TotalTime", "TimeWithFace"] + ML_FEATURES_LIST + ["Prediction", "Confidence", "Label"]
+        self.data_for_excel: List[List[Any]] = [self.excel_header]
+        self.plot_history: Dict[str, Deque[float]] = {
+           # Store smoothed values for plotting
+           'vx_l': collections.deque(maxlen=PLOT_HISTORY_LEN), 'vy_l': collections.deque(maxlen=PLOT_HISTORY_LEN),
+           'vx_r': collections.deque(maxlen=PLOT_HISTORY_LEN), 'vy_r': collections.deque(maxlen=PLOT_HISTORY_LEN)
+         }
+        self.plot_colors: List[Tuple[int,int,int]] = [(0,255,0), (255,0,0), (0,255,255), (255,0,255)] # L-VX, L-VY, R-VX, R-VY (BGR)
+        self.window_main: str = "Nystagmus Detection"
+        self.window_plot: str = "Smoothed Eye Velocity (X=Green/Yellow, Y=Red/Magenta)"
+
+
+    def _initialize_resources(self) -> bool:
+        """Setup camera and mediapipe."""
+        try:
+             self.face_mesh = self.mp_face_mesh.FaceMesh(
+                 static_image_mode=False, max_num_faces=1, refine_landmarks=True,
+                 min_detection_confidence=0.005, min_tracking_confidence=0.6)
+        except Exception as e:
+             logging.critical(f"Failed to initialize MediaPipe: {e}")
+             return False
+
+        # ----------------------------------------------- 
+        # OPTION 1 (commented out by default): Use webcam 
+        self.cap = cv2.VideoCapture(WEBCAM_INDEX)
+        if not self.cap.isOpened():
+            logging.critical(f"Error: Could not open webcam index {WEBCAM_INDEX}.")
+            return False
+        source = f"webcam index {WEBCAM_INDEX}"
+        
+        # OPTION 2: Use a file dialog to select any video
+        # root = tk.Tk()
+        # root.withdraw()  # Hide the main tkinter window
+        
+        # video_path = filedialog.askopenfilename(
+        #     title="Select a video file",
+        #     filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv"), ("All Files", "*.*")]
+        # )
+        
+        # if not video_path:
+        #     logging.critical("No file selected. Exiting...")
+        #     return False
+        
+        # self.cap = cv2.VideoCapture(video_path)
+        # source = video_path
+        # -----------------------------------------------
+            
+        if not self.cap or not self.cap.isOpened():
+            logging.critical(f"Cannot open video source: {source}.")
+            self.cap = None # Ensure it's None if failed
+            return False
+        logging.info(f"Video source '{source}' opened successfully.")
+        return True
+
+    def _release_resources(self) -> None:
+       """Clean up camera, windows, mediapipe."""
+       logging.info("Releasing resources...")
+       if self.cap:
+           self.cap.release()
+       if self.face_mesh:
+            self.face_mesh.close() # type: ignore
+       cv2.destroyAllWindows()
+
+    def _handle_training(self, frame: npt.NDArray) -> None:
+        """Triggered by keypress to train model."""
+        logging.info("--- Training key pressed. Attempting to train a new model... ---")
+        h, w, _ = frame.shape
+        cv2.putText(frame, "TRAINING MODEL...", (w//4 , h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
+        cv2.imshow(self.window_main, frame)
+        cv2.waitKey(1) # Force window update to show text
+        
+        new_model, new_scaler = train_new_model(
+             self.data_paths, ML_FEATURES_LIST, self.model_path, self.scaler_path)
+             
+        if new_model and new_scaler:
+            self.model, self.scaler = new_model, new_scaler
+            logging.info("Training successful. New model is now active.")
+        else:
+            logging.error("Training failed. Continuing with previous model (if any).")
+
+    def _update_plot(self, l_state: KinematicState, r_state: KinematicState) -> npt.NDArray:
+         """Draw the real-time velocity plot."""
+         plot_img = np.zeros((PLOT_HEIGHT, PLOT_WIDTH, 3), dtype=np.uint8)
+         # Draw zero line
+         cv2.line(plot_img, (0, PLOT_HEIGHT//2), (PLOT_WIDTH, PLOT_HEIGHT//2), (70,70,70), 1)
+         
+         self.plot_history['vx_l'].append(l_state.vx_norm_smoothed)
+         self.plot_history['vy_l'].append(l_state.vy_norm_smoothed)
+         self.plot_history['vx_r'].append(r_state.vx_norm_smoothed)
+         self.plot_history['vy_r'].append(r_state.vy_norm_smoothed)
+         
+         x_scale = PLOT_WIDTH / PLOT_HISTORY_LEN
+         for i, (key, hist) in enumerate(self.plot_history.items()):
+            if len(hist) < 2: continue
+            points = []
+            for j, v in enumerate(hist):
+                 x = int(j * x_scale)
+                 y = normalize_for_plot(v, MIN_V_PLOT, MAX_V_PLOT, PLOT_HEIGHT)
+                 points.append([x,y])
+            
+            points_arr = np.array(points, dtype=np.int32)
+            cv2.polylines(plot_img, [points_arr], isClosed=False, color=self.plot_colors[i], thickness=1)
+         return plot_img
+
+    def run(self) -> None:
+        """Main application execution loop with try...finally for cleanup."""
+        if not self._initialize_resources():
+            self._release_resources()
+            return
+            
+        self.model, self.scaler = load_model_and_scaler(self.model_path, self.scaler_path, len(ML_FEATURES_LIST))
+        if not self.model or not self.scaler:
+             logging.warning("Model not ready. Run in data-collection mode or press 'T' to train.")
+
+        self.last_timestamp = time.time()
+        l_state, r_state = KinematicState(), KinematicState() # Default states
+        
+        try: # --- TRY BLOCK: Main Loop ---
+            while self.cap and self.cap.isOpened():
+                ret, frame = self.cap.read()
+                if not ret:
+                    logging.info("End of video stream.")
+                    break
+
+                frame = cv2.flip(frame, 1) # Flip horizontally for mirror view
+                h, w, _ = frame.shape
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                # Time calculation
+                current_timestamp = time.time()
+                dt = current_timestamp - self.last_timestamp
+                # Prevent excessive dt if paused/lagged, cap at 0.1s (10 fps)
+                dt = min(dt, 0.1) 
+                self.last_timestamp = current_timestamp
+                self.total_time += dt
+                fps = 1.0 / dt if dt > 0 else 0.0
+                
+                # Reset per-frame state
+                prediction_val: Union[str, int, float] = "No Face"
+                prediction_conf: float = 0.0
+                all_features: Dict[str, float] = {feature: 0.0 for feature in ML_FEATURES_LIST}
+                face_detected = False
+                is_warmup = self.frame_index < FRAME_WARMUP_PERIOD
+
+                # Mediapipe Processing
+                results = self.face_mesh.process(frame_rgb) # type: ignore
+
+                if results and results.multi_face_landmarks:
+                     face_detected = True
+                     landmarks = results.multi_face_landmarks[0].landmark
+                     
+                     # Get points
+                     l_center: Point3D = (landmarks[LEFT_IRIS_CENTER].x, landmarks[LEFT_IRIS_CENTER].y, landmarks[LEFT_IRIS_CENTER].z)
+                     r_center: Point3D = (landmarks[RIGHT_IRIS_CENTER].x, landmarks[RIGHT_IRIS_CENTER].y, landmarks[RIGHT_IRIS_CENTER].z)
+                     p_left_scale = landmarks[LEFT_EYE_SCALING_PT]
+                     p_right_scale = landmarks[RIGHT_EYE_SCALING_PT]
+                    
+                     # Calculate Scaling Factor (using 3D distance between eye points)
+                     eye_dist_norm = np.linalg.norm(
+                         np.array([p_left_scale.x, p_left_scale.y, p_left_scale.z]) - 
+                         np.array([p_right_scale.x, p_right_scale.y, p_right_scale.z])
+                         )
+                     scaling_factor = AVG_EYE_WIDTH_MM / eye_dist_norm if eye_dist_norm > 1e-6 else 0.0
+                     
+                     # Only increment time_with_face after warmup
+                     current_time_with_face = self.time_with_face if is_warmup else self.time_with_face + dt
+                     if not is_warmup:
+                          self.time_with_face = current_time_with_face
+                          prediction_val = "Tracking" # Default if tracking but no model
+
+                     # Process Eyes - MUST run even during warmup to build history and update prev_pos
+                     l_state = self.tracker_left.process_frame(l_center, dt, scaling_factor, current_time_with_face)
+                     r_state = self.tracker_right.process_frame(r_center, dt, scaling_factor, current_time_with_face)
+
+                     if is_warmup:
+                          prediction_val = "Calibrating..."
+                     else:
+                         # --- Assemble Feature Dictionary ---
+                         all_features.update(self.tracker_left.get_feature_dict(l_state))
+                         all_features.update(self.tracker_right.get_feature_dict(r_state))
+
+                         # --- Prediction ---
+                         if self.model and self.scaler:
+                            try:
+                                feature_vector_list = [all_features.get(f, 0.0) for f in ML_FEATURES_LIST]
+                                feature_vector: npt.NDArray = np.array(feature_vector_list).reshape(1, -1) # Reshape for single sample
+                                scaled_vector = self.scaler.transform(feature_vector)
+                                prediction_val = self.model.predict(scaled_vector)[0]
+                                prediction_conf = float(np.max(self.model.predict_proba(scaled_vector)))
+                            except Exception as e:
+                                 logging.warning(f"Prediction failed on frame {self.frame_index}: {e}")
+                                 prediction_val = "Pred_Error"
+                         else:
+                              prediction_val = "No Model"
+
+                # --- Data Logging (even if no face, log the zeros) ---
+                # Label defaults to 0, adjust if you have a keypress to set labels during recording
+                excel_row_dict = {"Index": self.frame_index, "TotalTime": self.total_time, 
+                                  "TimeWithFace": self.time_with_face, "Prediction": prediction_val,
+                                   "Confidence": prediction_conf, "Label": 0} 
+                excel_row_dict.update(all_features)
+                # Ensure row order matches header exactly
+                self.data_for_excel.append([excel_row_dict.get(h, 0.0) for h in self.excel_header])
+
+                # --- Visualization ---
+                plot_img = self._update_plot(l_state, r_state)
+                cv2.imshow(self.window_plot, plot_img)
+
+                # Display Overlay on main frame
+                display_prefix = "" if face_detected or is_warmup else "[NO FACE] "
+                display_text = f"{display_prefix}State: {prediction_val}"
+                if isinstance(prediction_val, (int,float)) or (prediction_val not in ["No Face", "Calibrating...", "No Model", "Pred_Error", "Tracking"]):
+                   display_text += f" (Conf: {prediction_conf:.2f})"
+                   
+                color = (0, 165, 255) if is_warmup else (0, 255, 0) # Orange for warmup, Green otherwise
+                if not face_detected: color = (0,0,200) # Red if no face
+                cv2.putText(frame, display_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                cv2.putText(frame, f"FPS: {fps:.1f}", (w - 120, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+                cv2.putText(frame, f"Frame: {self.frame_index}", (w - 120, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+                if not self.model or not self.scaler:
+                     cv2.putText(frame, "Press 'T' to Train Model", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2) # Yellow
+                cv2.imshow(self.window_main, frame)
+                
+                self.frame_index += 1
+
+                # --- Key Handling ---
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27 or key == ord('q'): # ESC or Q Key
+                    logging.info("Exit key pressed.")
+                    break
+                elif key == ord('t'):
+                     self._handle_training(frame.copy()) # Pass copy in case training takes time
+
+        except KeyboardInterrupt:
+             logging.warning("Ctrl+C detected.")
+        except Exception as e:
+            logging.error(f"An unhandled error occurred in the main loop at frame {self.frame_index}: {e}", exc_info=True)
+            
+        finally: # --- FINALLY BLOCK: Always Run ---
+            logging.info("Shutting down application...")
+            self._release_resources()
+            
+            # Save data ONLY if loop finished (break or error), not during initialization failure
+            if self.cap: # check if capture was ever successfully created
+                
+                # --- [MODIFIED CODE] SAVE FINAL PLOT IMAGE ---
+                try:
+                    # Check if there's meaningful data to plot (i.e., loop ran for a bit)
+                    if self.frame_index > FRAME_WARMUP_PERIOD:
+                        logging.info("Generating final signal plot for saving...")
+                        
+                        # l_state and r_state are available from the last iteration before the loop exited.
+                        final_plot_image = self._update_plot(l_state, r_state)
+
+                        # Create a unique filename. This timestamp will be very close to the one used for the Excel sheet.
+                        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                        plot_filename = f"SignalPlot_{timestamp}.png"
+                        
+                        # Get the directory from the excel save path to ensure they are in the same location
+                        output_directory = os.path.dirname(self.save_path)
+                        plot_save_path = os.path.join(output_directory, plot_filename)
+
+                        # Save the image using OpenCV
+                        success = cv2.imwrite(plot_save_path, final_plot_image)
+                        if success:
+                            logging.info(f"Signal plot saved successfully to '{plot_save_path}'.")
+                        else:
+                            logging.error(f"Failed to save signal plot to '{plot_save_path}'. Check path and permissions.")
+                    else:
+                        logging.warning("Skipping plot saving: session was too short or no data was processed.")
+                except NameError:
+                     # This can happen if the loop never ran once (e.g. video file not found)
+                     logging.warning("Skipping plot saving: main loop did not run, no state to generate plot from.")
+                except Exception as e:
+                    logging.error(f"An error occurred while saving the final plot image: {e}", exc_info=True)
+                # --- END OF MODIFIED CODE ---
+
+                # Now save the Excel data
+                save_data_to_excel(self.save_path, self.data_for_excel)
+                
+            logging.info("Application terminated.")
+
+
+# =============================================================================
+# --- 5. SCRIPT ENTRY POINT ---
+# =============================================================================
+def main() -> None:
+     """Creates and runs the application instance."""
+     app = Application()
+     app.run()
+    
+if __name__ == "__main__":
+    main()
