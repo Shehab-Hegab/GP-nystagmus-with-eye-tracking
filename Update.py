@@ -71,6 +71,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 OUTPUT_DIR: str = r"F:\GP\ML\LiveData" # USE YOUR PATH
 NEW_DATA_FILENAME: str = "LiveData.xlsx"
 OLD_DATA_FILENAME: str = "Live-Old-Data.xlsx"
+
 MODEL_FILENAME: str = "tremor_model.joblib"
 SCALER_FILENAME: str = "tremor_scaler.joblib"
 
@@ -169,10 +170,10 @@ class EyeTracker:
         self.prev_vel_smoothed: Point3D = (0.0, 0.0, 0.0)
         self.prev_vx_for_freq: float = 0.0
         self.oscillation_count: int = 0
-         # History Deques for variance
-        self.dx_hist: Deque[float] = collections.deque(maxlen=history_len)
-        self.dy_hist: Deque[float] = collections.deque(maxlen=history_len)
-        self.dz_hist: Deque[float] = collections.deque(maxlen=history_len)
+        # History Deques for variance (stores absolute positions, not displacement)
+        self.x_pos_hist: Deque[float] = collections.deque(maxlen=history_len)
+        self.y_pos_hist: Deque[float] = collections.deque(maxlen=history_len)
+        self.z_pos_hist: Deque[float] = collections.deque(maxlen=history_len)
          # History Deques for smoothing
         self.vx_hist: Deque[float] = collections.deque(maxlen=smoothing_window)
         self.vy_hist: Deque[float] = collections.deque(maxlen=smoothing_window)
@@ -193,12 +194,13 @@ class EyeTracker:
             self.prev_pos = current_pos
             return state # Return default zero state
 
-        # 1. Displacement
+        # 1. Displacement and Position History
         dx, dy, dz = np.array(current_pos) - np.array(self.prev_pos)
         state.dx_norm, state.dy_norm, state.dz_norm = dx, dy, dz
-        self.dx_hist.append(dx)
-        self.dy_hist.append(dy)
-        self.dz_hist.append(dz)
+        # Append current ABSOLUTE position to history for variance calculation
+        self.x_pos_hist.append(current_pos[0])
+        self.y_pos_hist.append(current_pos[1])
+        self.z_pos_hist.append(current_pos[2])
 
         # 2. Raw and Smoothed Velocity
         vx, vy, vz = dx / dt, dy / dt, dz / dt
@@ -229,11 +231,13 @@ class EyeTracker:
         # A full cycle is 2 crossings; Hz = cycles / second
         state.freq_hz = (self.oscillation_count / 2) / time_with_face if time_with_face > 0.5 else 0.0 # Wait 0.5s
 
-        # 6. Variance
-        state.dx_variance = float(np.var(self.dx_hist)) if self.dx_hist else 0.0
-        state.dy_variance = float(np.var(self.dy_hist)) if self.dy_hist else 0.0
-        state.dz_variance = float(np.var(self.dz_hist)) if self.dz_hist else 0.0
+         # 6. Variance (of absolute position over the history window)
+        # This measures jitter/tremor amplitude, which is the desired metric.
+        state.dx_variance = float(np.var(self.x_pos_hist)) if self.x_pos_hist else 0.0
+        state.dy_variance = float(np.var(self.y_pos_hist)) if self.y_pos_hist else 0.0
+        state.dz_variance = float(np.var(self.z_pos_hist)) if self.z_pos_hist else 0.0
         
+                
         # 7. IMPORTANT: Update internal state for the *next* frame
         self.prev_pos = current_pos
         self.prev_vel_smoothed = (vx_s, vy_s, vz_s)
@@ -493,27 +497,27 @@ class Application:
 
         # ----------------------------------------------- 
         # OPTION 1 (commented out by default): Use webcam 
-        self.cap = cv2.VideoCapture(WEBCAM_INDEX)
-        if not self.cap.isOpened():
-            logging.critical(f"Error: Could not open webcam index {WEBCAM_INDEX}.")
-            return False
-        source = f"webcam index {WEBCAM_INDEX}"
+        # self.cap = cv2.VideoCapture(WEBCAM_INDEX)
+        # if not self.cap.isOpened():
+        #     logging.critical(f"Error: Could not open webcam index {WEBCAM_INDEX}.")
+        #     return False
+        # source = f"webcam index {WEBCAM_INDEX}"
         
         # OPTION 2: Use a file dialog to select any video
-        # root = tk.Tk()
-        # root.withdraw()  # Hide the main tkinter window
+        root = tk.Tk()
+        root.withdraw()  # Hide the main tkinter window
         
-        # video_path = filedialog.askopenfilename(
-        #     title="Select a video file",
-        #     filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv"), ("All Files", "*.*")]
-        # )
+        video_path = filedialog.askopenfilename(
+            title="Select a video file",
+            filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv"), ("All Files", "*.*")]
+        )
         
-        # if not video_path:
-        #     logging.critical("No file selected. Exiting...")
-        #     return False
+        if not video_path:
+            logging.critical("No file selected. Exiting...")
+            return False
         
-        # self.cap = cv2.VideoCapture(video_path)
-        # source = video_path
+        self.cap = cv2.VideoCapture(video_path)
+        source = video_path
         # -----------------------------------------------
             
         if not self.cap or not self.cap.isOpened():
