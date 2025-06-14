@@ -30,7 +30,7 @@ This project combines computer vision and interactive gameplay to monitor and im
 Two training modules are available:
 
 * 🔗 [Full Train Mode](https://drive.google.com/file/d/1_lrU5ZZ7M_gU2Fe3pQ_poHGJD09g1Ga6/view?usp=drive_link)
-* 🔗 [Single Train Mode](https://drive.google.com/file/d/1uQnZRPEIM_3OgR7_sidVaX8bNVZxBI8W/view?usp=drive_link)
+* 🔗 [Single Train Mode](https://drive.google.com/file/d/1ojR7fiq_VZm6pnLpM2B_Ad2jcESBpvXJ/view?usp=drive_link)
 
 Each mode uses a moving train animation to guide the user’s eye movements. The velocity of the train is adjustable to fit the user's condition or training goal.
 
