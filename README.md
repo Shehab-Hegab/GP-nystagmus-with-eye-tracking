@@ -183,3 +183,19 @@ All patient data, including their test histories and timestamps down to hours an
 ##
 
 ![image](https://github.com/user-attachments/assets/092d6997-75dd-45d1-8052-30825cb1814d)
+
+
+
+![WhatsApp Image 2025-06-12 at 20 52 00_4c61e718](https://github.com/user-attachments/assets/07f905d1-d35b-4cf5-b772-ea066cde9900)
+
+
+
+
+
+
+
+![WhatsApp Image 2025-06-12 at 20 52 34_7f5443be](https://github.com/user-attachments/assets/62e0bde9-637d-4508-bf5d-7512f558b505)
+![WhatsApp Image 2025-06-12 at 21 19 31_6d84fd56](https://github.com/user-attachments/assets/b7bc01ce-d7ab-497f-91f3-d82b43809e9b)
+![WhatsApp Image 2025-06-12 at 21 20 39_e4922c16](https://github.com/user-attachments/assets/f2e2468a-0426-4082-9cb8-f926df8252fa)
+![WhatsApp Image 2025-06-12 at 22 39 37_7bffa3fa](https://github.com/user-attachments/assets/d268187b-d2a9-4113-b6fe-cd77c8ae6cec)
+![WhatsApp Image 2025-06-12 at 22 40 03_e69abe84](https://github.com/user-attachments/assets/a8f77591-5252-489b-81ea-94df2618481d)
