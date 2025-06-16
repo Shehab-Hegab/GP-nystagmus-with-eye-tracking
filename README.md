@@ -354,6 +354,21 @@ This mode isolates and tracks the user's eyes without the surrounding facial con
 
 ---
 
+
+##
+for gaze fixation game 
+
+
+![image](https://github.com/user-attachments/assets/866840e4-0804-474b-bd45-6c6eb1e5a392)
+
+![image](https://github.com/user-attachments/assets/70d847cf-04b9-4bfd-bd50-b19bfb3dcdff)
+![image](https://github.com/user-attachments/assets/87c3b1b7-f9c2-405a-8bf0-3b79293406d3)
+
+![image](https://github.com/user-attachments/assets/b447d3c5-0600-4cfa-990e-dc0f3b0a0ee3)
+
+![image](https://github.com/user-attachments/assets/73a7e3e5-22a4-4291-ac75-34caa421ecfb)
+
+
 ## 🤝 Contribution
 
 We welcome collaboration, feedback, and contributions!  
