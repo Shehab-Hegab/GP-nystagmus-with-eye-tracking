@@ -215,3 +215,163 @@ All patient data, including their test histories and timestamps down to hours an
 ![SignalPlot_20250615_173523](https://github.com/user-attachments/assets/73c6e15a-ea34-4eb8-87dc-63c96ae91409)
 
 ![SignalPlot_20250615_174734](https://github.com/user-attachments/assets/f9205721-649c-4c1d-b96a-087f08d58ecb)
+
+
+
+
+##
+
+
+
+
+
+##
+# GP-Nystagmus Eye Tracking & Training System
+
+[![Unity](https://img.shields.io/badge/Platform-Unity-ffb400?logo=unity)]()
+[![Python](https://img.shields.io/badge/Backend-Python-blue?logo=python)]()
+[![License](https://img.shields.io/github/license/Shehab-Hegab/GP-nystagmus-with-eye-tracking)]()
+
+A real-time, interactive **eye-tracking and training system** designed in Unity, with backend analysis powered by deep learning models. The system supports patients with **oculomotor disorders** such as **nystagmus** by enhancing their gaze fixation through visual training games.
+
+---
+
+## 📚 Table of Contents
+
+- [🎯 Project Overview](#-project-overview)
+- [📂 Project Resources](#-project-resources)
+- [🎮 Game Modes](#-game-modes)
+- [🧠 System Architecture](#-system-architecture)
+- [🔁 Process Flow](#-process-flow)
+- [📊 How It Works](#-how-it-works)
+- [🖼️ Gameplay Snapshots](#-gameplay-snapshots)
+- [📁 Upload Mode](#-upload-mode)
+- [👁️ Eye-Only Tracking](#-eye-only-tracking)
+- [📈 Data Collection & Analysis](#-data-collection--analysis)
+- [🤝 Contribution](#-contribution)
+- [📧 Contact](#-contact)
+
+---
+
+## 🎯 Project Overview
+
+This project merges **computer vision**, **machine learning**, and **interactive Unity gameplay** to assist individuals with gaze-fixation difficulties.
+
+During gameplay, users are asked to follow a moving train with their eyes. A camera captures and logs their eye movements in real time. The data is then analyzed using **Convolutional Neural Networks (CNNs)** to detect irregularities and measure improvement.
+
+---
+
+## 📂 Project Resources
+
+- 📅 [Gantt Chart & Timeline](https://docs.google.com/spreadsheets/d/1TkLX_q5t6vAm9R57QAuC5okDFoFYQ8wd57yXewiJa3M/edit?usp=sharing)
+- 📋 Surveys:
+  - [📝 Patient Survey – Arabic](https://docs.google.com/forms/d/e/1FAIpQLSfhU_CxO59pTOpdHfrxsELWIn-23gpyVego-ujayt2F48EqSg/viewform)
+  - [📝 Patient Survey – English](https://forms.gle/nXjsG7GL7pAjySASA)
+  - [🩺 Doctor Survey](https://docs.google.com/forms/d/e/1FAIpQLSciKyrwdtClstPlHFf0jYcR8N-ioTminI9EbtT88zsERKBKZg/viewform)
+
+---
+
+## 🎮 Game Modes
+
+Two game modes are available:
+
+- 🚆 [Full Train Mode](https://drive.google.com/file/d/1_lrU5ZZ7M_gU2Fe3pQ_poHGJD09g1Ga6/view?usp=drive_link)
+- 🚈 [Single Train Mode](https://drive.google.com/file/d/1uQnZRPEIM_3OgR7_sidVaX8bNVZxBI8W/view?usp=drive_link)
+
+> 🧭 The train’s speed is adjustable based on the patient's condition, providing adaptive difficulty for different therapy stages.
+
+---
+
+## 🧠 System Architecture
+
+![System Architecture](https://github.com/user-attachments/assets/7de2ecc5-b16d-4cc5-b4e7-b312d7f127f5)
+
+---
+
+## 🔁 Process Flow
+
+![Process Diagram](https://github.com/user-attachments/assets/1502fac5-6160-49bb-bd6f-02e62fb42eb3)
+
+---
+
+## 📊 How It Works
+
+- 🧪 **Data Collection**: Real-time camera captures eye movement.
+- 🎮 **Game Interaction**: Patient follows a moving object on-screen.
+- 📦 **Data Storage**: Eye movement data saved to Excel format.
+- 🧠 **Deep Learning Analysis**: CNN model detects patterns for diagnosis.
+
+---
+
+## 🖼️ Gameplay Snapshots
+
+### 🎥 Full Train Mode
+
+![Full Train Gameplay](https://github.com/user-attachments/assets/e88a1ea3-178a-4f93-9001-25e3d3edc743)
+![Gameplay View 1](https://github.com/user-attachments/assets/1870d759-da74-462f-bde5-db7a476c92c5)
+![Gameplay View 2](https://github.com/user-attachments/assets/c719bd25-d1b4-4de2-a418-7ca8258a7538)
+![Gameplay View 3](https://github.com/user-attachments/assets/7e6c1f20-1fce-475d-9b43-01978fa4219b)
+![Gameplay View 4](https://github.com/user-attachments/assets/64cfd325-3fb2-476a-8001-76bc5a6a9a54)
+![Gameplay View 5](https://github.com/user-attachments/assets/2914c7b7-351a-48a4-b3b8-8300d532151f)
+![Gameplay View 6](https://github.com/user-attachments/assets/7b1ee11d-1a4e-4cf9-b47c-f731e8e0fb66)
+![Gameplay View 7](https://github.com/user-attachments/assets/6c5072b5-b5ce-472d-a7b0-9df170daea3d)
+
+---
+
+## 📁 Upload Mode
+
+Upload a recorded video for offline analysis. The system will extract eye movement data and produce plots and analytics.
+
+![Upload Videos](https://github.com/user-attachments/assets/8a77392b-bd8f-4082-93c3-9f816c7ab1f3)
+
+---
+
+## 👁️ Eye-Only Tracking
+
+This mode isolates and tracks the user's eyes without the surrounding facial context.
+
+![Eye Tracking Only](https://github.com/user-attachments/assets/918ef336-7b7b-41e4-ac6c-f8c70c944590)
+![Eye Plot](https://github.com/user-attachments/assets/61c0f74b-25c9-44e2-873d-b0f7a6afbbd5)
+
+---
+
+## 📈 Data Collection & Analysis
+
+- Eye movement sessions are saved as Excel files with millisecond-level timestamps.
+- A **CNN model** is trained on the gaze data to detect irregularities.
+- Data is visualized for easy interpretation by clinicians or researchers.
+
+![Data Graph](https://github.com/user-attachments/assets/092d6997-75dd-45d1-8052-30825cb1814d)
+![Graph 2](https://github.com/user-attachments/assets/07f905d1-d35b-4cf5-b772-ea066cde9900)
+![Graph 3](https://github.com/user-attachments/assets/62e0bde9-637d-4508-bf5d-7512f558b505)
+![Graph 4](https://github.com/user-attachments/assets/b7bc01ce-d7ab-497f-91f3-d82b43809e9b)
+![Graph 5](https://github.com/user-attachments/assets/f2e2468a-0426-4082-9cb8-f926df8252fa)
+![Graph 6](https://github.com/user-attachments/assets/d268187b-d2a9-4113-b6fe-cd77c8ae6cec)
+![Graph 7](https://github.com/user-attachments/assets/e1ff3bf8-60c6-4505-a5ac-28232e8ba544)
+![Graph 8](https://github.com/user-attachments/assets/a8f77591-5252-489b-81ea-94df2618481d)
+![Graph 9](https://github.com/user-attachments/assets/73c6e15a-ea34-4eb8-87dc-63c96ae91409)
+![Graph 10](https://github.com/user-attachments/assets/f9205721-649c-4c1d-b96a-087f08d58ecb)
+
+---
+
+## 🤝 Contribution
+
+We welcome collaboration, feedback, and contributions!  
+Feel free to:
+
+- Submit bug reports or feature requests via **GitHub Issues**
+- Fork the repo and open a **Pull Request** for improvements or experiments
+
+---
+
+## 📧 Contact
+
+For research inquiries, academic collaboration, or technical questions, please reach out via:
+
+- 💼 [GitHub Profile](https://github.com/Shehab-Hegab)
+- 📝 [Surveys and Contact Forms](#-project-resources)
+
+---
+
+> _This project was developed as part of a graduation thesis exploring the intersection of assistive technology, human-computer interaction, and biomedical AI._
+
