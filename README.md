@@ -368,6 +368,11 @@ for gaze fixation game
 
 ![image](https://github.com/user-attachments/assets/73a7e3e5-22a4-4291-ac75-34caa421ecfb)
 
+![Screenshot 2025-06-21 213221](https://github.com/user-attachments/assets/fc21dd9c-8cbd-43d7-aff9-6a273a067a1b)
+
+
+
+
 
 ## 🤝 Contribution
 
