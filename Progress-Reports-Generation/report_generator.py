@@ -1057,7 +1057,7 @@ class ReportGenerator:
         return elements
     
     @staticmethod
-    def _create_detailed_analysis(analysis: dict, styles) -> plt.Figure:
+    def _create_detailed_analysis(analysis: dict, styles) -> list:
         """Create detailed metrics page for the condition analysis"""
         elements = []
         
@@ -1067,59 +1067,93 @@ class ReportGenerator:
         if 'error' in analysis:
             return elements
         
-        # Create table data
+        # Create table data - convert all text to Paragraphs for proper wrapping
         table_data = [
-            ["Metric", "Left Eye", "Right Eye", "Threshold", "Interpretation"]
+            [
+                Paragraph("Metric", styles['Normal']),
+                Paragraph("Left Eye", styles['Normal']),
+                Paragraph("Right Eye", styles['Normal']),
+                Paragraph("Threshold", styles['Normal']),
+                Paragraph("Interpretation", styles['Normal'])
+            ]
         ]
         
-        # Add movement metrics
-        table_data.append(["Movement Velocity (mm/s)", 
-                         f"{analysis['basic_metrics'].get('Left_Vel_Magnitude_mm_s_mean', 0):.1f}",
-                         f"{analysis['basic_metrics'].get('Right_Vel_Magnitude_mm_s_mean', 0):.1f}",
-                         ">15 normal",
-                         "Low velocity may indicate fatigue"])
+        # Helper function to create wrapped cell content
+        def create_cell(content, style=styles['Normal']):
+            return Paragraph(content, style) if isinstance(content, str) else content
+        
+        # Add movement metrics with wrapped text
+        table_data.append([
+            create_cell("Movement Velocity (mm/s)", styles['Normal']),
+            create_cell(f"{analysis['basic_metrics'].get('Left_Vel_Magnitude_mm_s_mean', 0):.1f}"),
+            create_cell(f"{analysis['basic_metrics'].get('Right_Vel_Magnitude_mm_s_mean', 0):.1f}"),
+            create_cell(">15 normal"),
+            create_cell("Low velocity may indicate fatigue or neurological impairment")
+        ])
         
         # Add frequency metrics
-        table_data.append(["Movement Frequency (Hz)", 
-                         f"{analysis['basic_metrics'].get('Left_Freq_Hz_mean', 0):.1f}",
-                         f"{analysis['basic_metrics'].get('Right_Freq_Hz_mean', 0):.1f}",
-                         "0.5-2.5 normal",
-                         "High frequency may indicate nystagmus"])
+        table_data.append([
+            create_cell("Movement Frequency (Hz)"),
+            create_cell(f"{analysis['basic_metrics'].get('Left_Freq_Hz_mean', 0):.1f}"),
+            create_cell(f"{analysis['basic_metrics'].get('Right_Freq_Hz_mean', 0):.1f}"),
+            create_cell("0.5-2.5 normal"),
+            create_cell("High frequency may indicate nystagmus or other oscillatory conditions")
+        ])
         
         # Add variance metrics
-        table_data.append(["Position Variance", 
-                         f"{analysis['basic_metrics'].get('Left_DX_Variance_mean', 0):.3f}",
-                         f"{analysis['basic_metrics'].get('Right_DX_Variance_mean', 0):.3f}",
-                         "<0.01 stable",
-                         "High variance indicates tremor or instability"])
+        table_data.append([
+            create_cell("Position Variance"),
+            create_cell(f"{analysis['basic_metrics'].get('Left_DX_Variance_mean', 0):.3f}"),
+            create_cell(f"{analysis['basic_metrics'].get('Right_DX_Variance_mean', 0):.3f}"),
+            create_cell("<0.01 stable"),
+            create_cell("High variance indicates tremor, instability, or poor tracking ability")
+        ])
         
-        # Create table
-        table = Table(table_data, colWidths=[1.5*inch, 0.8*inch, 0.8*inch, 1.0*inch, 2.0*inch])
+        # Column widths (adjust as needed)
+        col_widths = [1.5*inch, 0.8*inch, 0.8*inch, 1.0*inch, 2.0*inch]
+        
+        # Create table with dynamic row heights
+        table = Table(table_data, colWidths=col_widths)
         table.setStyle(TableStyle([
+            # Header styling
             ('BACKGROUND', (0,0), (-1,0), colors.grey),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('ALIGN', (0,0), (-1,0), 'CENTER'),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('FONTSIZE', (0,0), (-1,0), 10),
             ('BOTTOMPADDING', (0,0), (-1,0), 12),
+            
+            # Data row styling
             ('BACKGROUND', (0,1), (-1,-1), colors.beige),
             ('GRID', (0,0), (-1,-1), 1, colors.black),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('WORDWRAP', (0,0), (-1,-1)),
+            
+            # Content handling for dynamic heights
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('WORDWRAP', (0,0), (-1,-1), True),
+            
+            # Numeric alignment
+            ('ALIGN', (1,1), (2,-1), 'CENTER'),
+            ('ALIGN', (3,1), (3,-1), 'CENTER'),
+            
+            # Padding for better readability
+            ('LEFTPADDING', (0,0), (-1,-1), 4),
+            ('RIGHTPADDING', (0,0), (-1,-1), 4),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
         ]))
         
         elements.append(table)
         elements.append(Spacer(1, 0.3*inch))
         
-        # Condition flags
-        if analysis['flags']:
-            elements.append(Paragraph("Condition Flags Detected:", 
-                                    styles['Heading2']))
+        # Condition flags with improved formatting
+        if analysis.get('flags'):
+            elements.append(Paragraph("Condition Flags Detected:", styles['Heading2']))
             for flag in analysis['flags']:
                 elements.append(Paragraph(
-                    f"• {flag.replace('_', ' ').title()}",
+                    f"• {flag.replace('_', ' ').title()}: {analysis['flags'][flag].get('description', '')}",
                     styles['Bullet']
                 ))
+            elements.append(Spacer(1, 0.2*inch))
         
         return elements
 
