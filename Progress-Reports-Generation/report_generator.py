@@ -990,13 +990,19 @@ class ReportGenerator:
                              styles['Normal']))
         story.append(PageBreak())
         
+        print("111")
+        
         # 2. Condition Summary
         story += ReportGenerator._create_condition_summary(condition_analysis, styles)
         story.append(PageBreak())
         
+        print("222")
+
         # 3. Detailed Analysis
         story += ReportGenerator._create_detailed_analysis(condition_analysis, styles)
         story.append(PageBreak())
+        
+        print("333")
         
         # 4. Visualizations
         story += ReportGenerator._add_visualizations(df, config, styles)
@@ -1145,14 +1151,25 @@ class ReportGenerator:
         elements.append(table)
         elements.append(Spacer(1, 0.3*inch))
         
-        # Condition flags with improved formatting
+        # Fix the condition flags section:
         if analysis.get('flags'):
             elements.append(Paragraph("Condition Flags Detected:", styles['Heading2']))
-            for flag in analysis['flags']:
-                elements.append(Paragraph(
-                    f"• {flag.replace('_', ' ').title()}: {analysis['flags'][flag].get('description', '')}",
-                    styles['Bullet']
-                ))
+            
+            # Handle case where flags is a list of strings
+            if isinstance(analysis['flags'], list):
+                for flag in analysis['flags']:
+                    elements.append(Paragraph(
+                        f"• {flag.replace('_', ' ').title()}",
+                        styles['Bullet']
+                    ))
+            # Handle case where flags is a list of dicts (if needed)
+            elif isinstance(analysis['flags'][0], dict):
+                for flag in analysis['flags']:
+                    elements.append(Paragraph(
+                        f"• {flag.get('condition', 'Unknown')}: {flag.get('description', '')}",
+                        styles['Bullet']
+                    ))
+            
             elements.append(Spacer(1, 0.2*inch))
         
         return elements
