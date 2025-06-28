@@ -924,7 +924,7 @@ class ReportGenerator:
             ('Statistical Summary', DataVisualizer.show_statistics),
             ('Feature Trends', DataVisualizer.create_grid_plot),
             ('Feature Correlations', DataVisualizer.create_correlation_heatmap),
-            ('Movement Analysis', DataVisualizer.plot_movement_analysis)
+            # ('Movement Analysis', DataVisualizer.plot_movement_analysis)
         ]
         
         for title, plot_method in visualization_sequence:
@@ -1079,7 +1079,7 @@ class ReportGenerator:
                 Paragraph("Metric", styles['Normal']),
                 Paragraph("Left Eye", styles['Normal']),
                 Paragraph("Right Eye", styles['Normal']),
-                Paragraph("Threshold", styles['Normal']),
+                # Paragraph("Threshold", styles['Normal']),
                 Paragraph("Interpretation", styles['Normal'])
             ]
         ]
@@ -1093,7 +1093,7 @@ class ReportGenerator:
             create_cell("Movement Velocity (mm/s)", styles['Normal']),
             create_cell(f"{analysis['basic_metrics'].get('Left_Vel_Magnitude_mm_s_mean', 0):.1f}"),
             create_cell(f"{analysis['basic_metrics'].get('Right_Vel_Magnitude_mm_s_mean', 0):.1f}"),
-            create_cell(">15 normal"),
+            # create_cell(">15 normal"),
             create_cell("Low velocity may indicate fatigue or neurological impairment")
         ])
         
@@ -1102,7 +1102,7 @@ class ReportGenerator:
             create_cell("Movement Frequency (Hz)"),
             create_cell(f"{analysis['basic_metrics'].get('Left_Freq_Hz_mean', 0):.1f}"),
             create_cell(f"{analysis['basic_metrics'].get('Right_Freq_Hz_mean', 0):.1f}"),
-            create_cell("0.5-2.5 normal"),
+            # create_cell("0.5-2.5 normal"),
             create_cell("High frequency may indicate nystagmus or other oscillatory conditions")
         ])
         
@@ -1111,7 +1111,7 @@ class ReportGenerator:
             create_cell("Position Variance"),
             create_cell(f"{analysis['basic_metrics'].get('Left_DX_Variance_mean', 0):.3f}"),
             create_cell(f"{analysis['basic_metrics'].get('Right_DX_Variance_mean', 0):.3f}"),
-            create_cell("<0.01 stable"),
+            # create_cell("<0.01 stable"),
             create_cell("High variance indicates tremor, instability, or poor tracking ability")
         ])
         
