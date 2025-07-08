@@ -151,6 +151,10 @@ Combines **Unity**, **Machine Learning**, **WebSocket integration**, and **signa
 ![Rubik 12](https://github.com/user-attachments/assets/097c3714-1e8b-4ddf-821c-a1d22ca2c06d)
 ![Rubik 13](https://github.com/user-attachments/assets/147f283c-a50d-4f66-8b08-5cb2584a0a4e)
 
+![WhatsApp Image 2025-06-29 at 09 28 12_bffd575f](https://github.com/user-attachments/assets/0e0a1f1a-89d2-4bee-99e5-b8ee85069813)
+
+![WhatsApp Image 2025-06-29 at 09 28 18_650371ec](https://github.com/user-attachments/assets/d94fc86e-ea35-4b2f-9b50-600205673f71)
+
 ---
 
 ## 🤝 Contribution
